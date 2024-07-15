@@ -76,8 +76,8 @@ String record = "";
 //String htmlView = "";
 struct tm tmstruct;
 // WiFi credentials
-const char *ssid = "TP-Link_AD28";
-const char *password = "96969755";
+const char *ssid = "keng";  //Change for testing -> :TP-Link_AD28
+const char *password = "Keng1812";  //Change for testing -> :96969755
 
 
 
@@ -128,6 +128,7 @@ void startButtonCallback(Control *sender, int type);
 void loadResultCallback(Control *sender, int type);
 void downloadCallback(Control *sender, int type);
 void moveAxisXY(Control *sender, int type);
+void posButtonCallback(Control *sender, int type);
 void setTextInputCallback(Control *sender, int type);
 void configButtonCallback(Control *sender, int type);
 void enterWifiDetailsCallback(Control * sender, int type);
@@ -575,7 +576,9 @@ void setUpUI() {
 
   nameText = ESPUI.addControl(ControlType::Text, "Name", "", ControlColor::None, settingTab, setTextInputCallback);
   loopText = ESPUI.addControl(ControlType::Text, "Loop", "", ControlColor::None, settingTab, setTextInputCallback);
-  posText = ESPUI.addControl(ControlType::Text, "Pos", "", ControlColor::None, settingTab, setTextInputCallback);
+  posText = ESPUI.addControl(ControlType::Button, "Pos", "3x3", ControlColor::None, settingTab);
+  ESPUI.addControl(ControlType::Button, "", "4x4", ControlColor::None, posText, posButtonCallback);
+  ESPUI.addControl(ControlType::Button, "", "5x5", ControlColor::None, posText, posButtonCallback);
   moveText = ESPUI.addControl(ControlType::Text, "Move", "", ControlColor::None, settingTab, setTextInputCallback);
   saveConfigButton = ESPUI.addControl(ControlType::Button, "Save Config", "Save", ControlColor::None, settingTab, configButtonCallback);
 
@@ -604,6 +607,13 @@ void setUpUI() {
 }
 
 //This callback generates and applies inline styles to a bunch of controls to change their colour.
+
+void posButtonCallback(Control *sender, int type) {
+  Control* pos_ = ESPUI.getControl(posText);
+  pos_->value = sender->value;
+  ESPUI.updateControl(pos_);
+  Serial.println(pos_->value);  // Print the updated value
+}
 
 void setTextInputCallback(Control *sender, int type) {
   Serial.println(sender->value);
@@ -1181,12 +1191,7 @@ void loop() {
     //    loopCount = 0;
   }
 
-
-
-
 }
-
-
 
 
 //Utilities
