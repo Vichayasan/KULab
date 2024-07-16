@@ -112,15 +112,27 @@ int previousX = 0;
 int previousY = 0;
 int previousZ = 0;
 // Define a struct to hold configuration parameters
-struct Config
+struct Config //For General Detail
 {
   String name;
   int loop;
   int numPos;
-  int pos[9][3]; // Assuming a maximum of 9 move positions with x, y, z coordinates
+  int pos[9][2]; // Assuming a maximum of 9 move positions with x, y, z coordinates
+};
+
+struct Config01 //For 3x3
+{
+  int pos[9][2]; // Assuming a maximum of 9 move positions with x, y, z coordinates
+};
+
+struct Config02 //For 30x30
+{
+  int pos[961][2]; // Assuming a maximum of 9 move positions with x, y, z coordinates
 };
 
 Config config;
+Config01 config01;
+Config02 config02;
 
 //For VS code IDE
 void generalCallback(Control *sender, int type);
@@ -153,7 +165,7 @@ void heartBeat()
   // SerialBT.println("Heartbeat");
 }
 
-void split(const String &str, char delimiter, int arr[][3], int row)
+void split(const String &str, char delimiter, int arr[][2], int row)
 {
   int rowIndex = 0;
   int colIndex = 0;
@@ -163,7 +175,6 @@ void split(const String &str, char delimiter, int arr[][3], int row)
 
   arr[row][0] = str.substring(startIndex, firstIndex).toInt();
   arr[row][1] = str.substring(firstIndex + 1, str.lastIndexOf(delimiter)).toInt();
-  arr[row][2] = str.substring(str.lastIndexOf(delimiter) + 1, str.length()).toInt();
 }
 
 // Function to read configuration data from file and populate the Config struct
@@ -188,7 +199,7 @@ bool readConfig(const String &filename, Config &config)
   String line;
   int moveIndex = 0;
   int rows = 9;
-  int arr[9][3] = {0}; // 9x3 array to store the split parts
+  int arr[9][2] = {0}; // 9x2 array to store the split parts
 
   while (configFile.available())
   {
@@ -197,21 +208,31 @@ bool readConfig(const String &filename, Config &config)
     if (line.startsWith("Name="))
     {
       config.name = line.substring(5); // Extract the name from the line
+      Serial.println("Config name: " + config.name);
+      ESPUI.updateControlValue(nameText, config.name);
     }
-    else if (line.startsWith("Loop="))
+    /*else if (line.startsWith("Loop="))
     {
       config.loop = line.substring(5).toInt(); // Convert loop value to integer
-    }
+      Serial.println("Loop value: " + String(config.loop));
+      ESPUI.updateControlValue(loopText,  String(config.loop));
+    }*/
     else if (line.startsWith("Pos="))
     {
       config.numPos = line.substring(4).toInt(); // Convert numPos value to integer
+      Serial.println("Number of positions: " + String(config.numPos));
+      ESPUI.updateControlValue(posText, String(config.numPos));
     }
     else if (line.startsWith("Move="))
     {
+      Serial.println("Move positions:");
       for (int i = 0; i < config.numPos; i++)
       {
         line = configFile.readStringUntil('\n');
         split(line, ',', config.pos, i);
+        Serial.print(config.pos[i][0]);
+        Serial.print(", ");
+        Serial.println(config.pos[i][1]);
       }
     }
   }
@@ -413,25 +434,25 @@ float readLoadCell()
 
 void moveLeft()
 {
-  // Serial.println("moveLeft");
-  // delay(100);
+  Serial.println("moveLeft");
+  delay(100);
 }
 
 void moveRight()
 {
-  // Serial.println("moveRight");
-  // delay(100);
+  Serial.println("moveRight");
+  delay(100);
 }
 
 void lift()
 {
   Serial.println("lift");
-  // delay(100);
+  delay(100);
 }
 void down()
 {
   Serial.println("down");//
-  // delay(100);
+  delay(100);
 }
 
 void press()
@@ -576,9 +597,12 @@ void setUpUI() {
 
   nameText = ESPUI.addControl(ControlType::Text, "Name", "", ControlColor::None, settingTab, setTextInputCallback);
   loopText = ESPUI.addControl(ControlType::Text, "Loop", "", ControlColor::None, settingTab, setTextInputCallback);
-  posText = ESPUI.addControl(ControlType::Button, "Pos", "3x3", ControlColor::None, settingTab);
+  posText = ESPUI.addControl(ControlType::Button, "Pattern", "3 X 3", ControlColor::None, settingTab, posButtonCallback);
+
+  // Add additional buttons under the posText control (parent control)
   ESPUI.addControl(ControlType::Button, "", "1 Center point", ControlColor::None, posText, posButtonCallback);
-  ESPUI.addControl(ControlType::Button, "", "30x30", ControlColor::None, posText, posButtonCallback);
+  ESPUI.addControl(ControlType::Button, "", "30 X 30", ControlColor::None, posText, posButtonCallback);
+
   moveText = ESPUI.addControl(ControlType::Text, "Move", "", ControlColor::None, settingTab, setTextInputCallback);
   saveConfigButton = ESPUI.addControl(ControlType::Button, "Save Config", "Save", ControlColor::None, settingTab, configButtonCallback);
 
@@ -762,9 +786,9 @@ void loadResultCallback(Control *sender, int type) {
   Serial.println(sender->value);
   ESPUI.updateLabel(grouplabel2, String(fileName));
   ESPUI.updateControl(resultLabel);
-  //  listDir(SD, "/", 0);
-  // readFile(SD, fileName.c_str());
-  //  readFile(SD, "/server.log.2023-07-31");
+  //listDir(SD, "/", 0);
+  //readFile(SD, fileName.c_str());
+  //readFile(SD, "/server.log.2023-07-31");
   record.concat("Date/Time,Loop,Round,Value1,Value2,Value3,Value4,Value5,Value6,Value7,Value8,Value9,Value10,Value11,Value12,LoadCell\n");
   appendFile(SD, fileNameResult.c_str(), record.c_str());
   record = "";
@@ -1016,19 +1040,28 @@ void setup() {
   stepperZ.setAcceleration(6000);
   stepperZ.setCurrentPosition(0);
 
-
   if (readConfig("/test01.config", config)) {
-    // Print configuration data
-    Serial.println("Config name: " + config.name);
-    ESPUI.updateControlValue(nameText, config.name);
-    Serial.println("Loop value: " + String(config.loop));
-    ESPUI.updateControlValue(loopText,  String(config.loop));
-    Serial.println("Number of positions: " + String(config.numPos));
-    ESPUI.updateControlValue(posText, String(config.numPos));
-    Serial.println("Move positions:");
-
+    // Print configuration data in readConfig module
 
   }
+  
+  if (readConfig("/test02.config", config)) {
+    // Print configuration data in readConfig module
+    
+  }
+  
+  Serial.print("Free heap memory: ");
+  Serial.print(ESP.getFreeHeap());
+  Serial.println(" bytes");
+
+  if (readConfig("/test03.config", config)) {
+    // Print configuration data in readConfig module
+  }
+
+  Serial.print("Free heap memory: ");
+  Serial.print(ESP.getFreeHeap());
+  Serial.println(" bytes");
+
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
 
   scale.set_scale(CALIBRATION_FACTOR); // this value is obtained by calibrating the scale with known weights
@@ -1038,15 +1071,43 @@ void setup() {
 }
 
 void moveToStart() {
-  //  Serial.println("move2start");
-  stepperX.moveTo(-1000);
-  stepperX.runToPosition();
-  stepperX.setCurrentPosition(0);
+  // Retrieve the Control object for posText
+  Control* posControl = ESPUI.getControl(posText);
 
-  stepperY.moveTo(-1000);
-  stepperY.runToPosition();
-  stepperY.setCurrentPosition(0);
+  // Get the value from the Control object and convert it to a C-string
+  const char* posValue = posControl->value.c_str();
+
+  // Perform actions based on the value
+  if (strcmp(posValue, "3x3") == 0) {
+    stepperX.moveTo(-1000);
+    stepperX.runToPosition();
+    stepperX.setCurrentPosition(0);
+
+    stepperY.moveTo(-1000);
+    stepperY.runToPosition();
+    stepperY.setCurrentPosition(0);
+  }
+  if (strcmp(posValue, "1 Center point") == 0) {
+    stepperX.moveTo(0);
+    stepperX.runToPosition();
+    stepperX.setCurrentPosition(0);
+
+    stepperY.moveTo(0);
+    stepperY.runToPosition();
+    stepperY.setCurrentPosition(0);
+  }
+  if (strcmp(posValue, "30x30") == 0) {
+    stepperX.moveTo(-10000);
+    stepperX.runToPosition();
+    stepperX.setCurrentPosition(0);
+
+    stepperY.moveTo(-10000);
+    stepperY.runToPosition();
+    stepperY.setCurrentPosition(0);
+  }
 }
+
+
 void loop() {
   static long unsigned lastTime = 0;
 
@@ -1190,6 +1251,7 @@ void loop() {
     isStopStart = false;
     //    loopCount = 0;
   }
+  
 
 }
 
