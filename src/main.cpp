@@ -577,8 +577,8 @@ void setUpUI() {
   nameText = ESPUI.addControl(ControlType::Text, "Name", "", ControlColor::None, settingTab, setTextInputCallback);
   loopText = ESPUI.addControl(ControlType::Text, "Loop", "", ControlColor::None, settingTab, setTextInputCallback);
   posText = ESPUI.addControl(ControlType::Button, "Pos", "3x3", ControlColor::None, settingTab);
-  ESPUI.addControl(ControlType::Button, "", "4x4", ControlColor::None, posText, posButtonCallback);
-  ESPUI.addControl(ControlType::Button, "", "5x5", ControlColor::None, posText, posButtonCallback);
+  ESPUI.addControl(ControlType::Button, "", "1 Center point", ControlColor::None, posText, posButtonCallback);
+  ESPUI.addControl(ControlType::Button, "", "30x30", ControlColor::None, posText, posButtonCallback);
   moveText = ESPUI.addControl(ControlType::Text, "Move", "", ControlColor::None, settingTab, setTextInputCallback);
   saveConfigButton = ESPUI.addControl(ControlType::Button, "Save Config", "Save", ControlColor::None, settingTab, configButtonCallback);
 
