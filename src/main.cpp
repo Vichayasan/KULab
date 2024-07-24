@@ -1,4 +1,5 @@
-#include "ArduinoJson.h"
+
+
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <ESPUI.h>
@@ -61,7 +62,18 @@ ADS1115 ads[4]; // Array to store ADS1115 objects
 File myFile;
 ESP32Time rtc;
 
-
+//For VS code IDE
+void generalCallback(Control *sender, int type);
+void startButtonCallback(Control *sender, int type);
+void loadResultCallback(Control *sender, int type);
+void downloadCallback(Control *sender, int type);
+void moveAxisXY(Control *sender, int type);
+void posButtonCallback(Control *sender, int type);
+void setTextInputCallback(Control *sender, int type);
+void configButtonCallback(Control *sender, int type);
+void enterWifiDetailsCallback(Control * sender, int type);
+void randomString(char *buf, int len);
+void connectWifi();
 
 String yearStr = "";
 String monthStr = "";
@@ -76,13 +88,10 @@ String record = "";
 //String htmlView = "";
 struct tm tmstruct;
 // WiFi credentials
-const char *ssid = "keng";  //Change for testing -> :TP-Link_AD28
-const char *password = "Keng1812";  //Change for testing -> :96969755
+const char *ssid = "TP-Link_AD28";  //TP-Link_AD28
+const char *password = "96969755"; //96969755
 
 
-
-
-String optionValues[] {"Value 1", "Value 2", "Value 3", "Value 4", "Value 5"};
 
 
 String dateTimeStr = "";
@@ -112,40 +121,31 @@ int previousX = 0;
 int previousY = 0;
 int previousZ = 0;
 // Define a struct to hold configuration parameters
-struct Config //For General Detail
-{
-  String name;
-  int loop;
-  int numPos;
-  int pos[9][2]; // Assuming a maximum of 9 move positions with x, y, z coordinates
+
+struct Config01 {
+    String name;
+    int loop;
+    int numPos;
+    int **pos; // Dynamically allocated array
 };
 
-struct Config01 //For 3x3
-{
-  int pos[9][2]; // Assuming a maximum of 9 move positions with x, y, z coordinates
+struct Config02 {
+    String name;
+    int loop;
+    int numPos;
+    int **pos; // Dynamically allocated array
 };
 
-struct Config02 //For 30x30
-{
-  int pos[961][2]; // Assuming a maximum of 9 move positions with x, y, z coordinates
+struct Config03 {
+    String name;
+    int loop;
+    int numPos;
+    int **pos; // Dynamically allocated array
 };
 
-Config config;
 Config01 config01;
 Config02 config02;
-
-//For VS code IDE
-void generalCallback(Control *sender, int type);
-void startButtonCallback(Control *sender, int type);
-void loadResultCallback(Control *sender, int type);
-void downloadCallback(Control *sender, int type);
-void moveAxisXY(Control *sender, int type);
-void posButtonCallback(Control *sender, int type);
-void setTextInputCallback(Control *sender, int type);
-void configButtonCallback(Control *sender, int type);
-void enterWifiDetailsCallback(Control * sender, int type);
-void randomString(char *buf, int len);
-void connectWifi();
+Config03 config03;
 
 void heartBeat()
 {
@@ -165,80 +165,168 @@ void heartBeat()
   // SerialBT.println("Heartbeat");
 }
 
-void split(const String &str, char delimiter, int arr[][2], int row)
-{
-  int rowIndex = 0;
-  int colIndex = 0;
-  int startIndex = 0;
-  int firstIndex = str.indexOf(delimiter);
-  String _secondTemp;
-
-  arr[row][0] = str.substring(startIndex, firstIndex).toInt();
-  arr[row][1] = str.substring(firstIndex + 1, str.lastIndexOf(delimiter)).toInt();
+void split(const String &str, char delimiter, int **arr, int row) {
+    int startIndex = 0;
+    int endIndex = str.indexOf(delimiter);
+    
+    arr[row][0] = str.substring(startIndex, endIndex).toInt();
+    startIndex = endIndex + 1;
+    endIndex = str.indexOf(delimiter, startIndex);
+    arr[row][1] = str.substring(startIndex, endIndex).toInt();
+    startIndex = endIndex + 1;
+    arr[row][2] = str.substring(startIndex).toInt();
 }
 
 // Function to read configuration data from file and populate the Config struct
-bool readConfig(const String &filename, Config &config)
-{
-  // Initialize SD card
-  if (!SD.begin())
-  {
-    Serial.println("SD card initialization failed.");
-    return false;
-  }
-
-  // Open the config file
-  File configFile = SD.open(filename);
-  if (!configFile)
-  {
-    Serial.println("Config file not found.");
-    return false;
-  }
-
-  // Read the contents of the config file line by line
-  String line;
-  int moveIndex = 0;
-  int rows = 9;
-  int arr[9][2] = {0}; // 9x2 array to store the split parts
-
-  while (configFile.available())
-  {
-    line = configFile.readStringUntil('\n');
-    line.trim();
-    if (line.startsWith("Name="))
-    {
-      config.name = line.substring(5); // Extract the name from the line
-      Serial.println("Config name: " + config.name);
-      ESPUI.updateControlValue(nameText, config.name);
+bool readConfig(const String &filename, Config01 &config01, Config02 &config02, Config03 &config03) {
+    // Initialize SD card
+    if (!SD.begin()) {
+        Serial.println("SD card initialization failed.");
+        return false;
     }
-    /*else if (line.startsWith("Loop="))
-    {
-      config.loop = line.substring(5).toInt(); // Convert loop value to integer
-      Serial.println("Loop value: " + String(config.loop));
-      ESPUI.updateControlValue(loopText,  String(config.loop));
-    }*/
-    else if (line.startsWith("Pos="))
-    {
-      config.numPos = line.substring(4).toInt(); // Convert numPos value to integer
-      Serial.println("Number of positions: " + String(config.numPos));
-      ESPUI.updateControlValue(posText, String(config.numPos));
+
+    // Open the config file
+    File configFile = SD.open(filename);
+    if (!configFile) {
+        Serial.println("Config file not found.");
+        return false;
     }
-    else if (line.startsWith("Move="))
-    {
-      Serial.println("Move positions:");
-      for (int i = 0; i < config.numPos; i++)
-      {
+
+    // Read the contents of the config file line by line
+    String line;
+    int rows = 0;
+    int **arr = nullptr;
+
+    if (filename.equals("/test01.config")) {
+        rows = 9;
+        config01.pos = new int*[rows];
+        for (int i = 0; i < rows; ++i) {
+            config01.pos[i] = new int[3]();
+        }
+        arr = config01.pos;
+    } else if (filename.equals("/test02.config")) {
+        rows = 1;
+        config02.pos = new int*[rows];
+        for (int i = 0; i < rows; ++i) {
+            config02.pos[i] = new int[3]();
+        }
+        arr = config02.pos;
+    } else if (filename.equals("/test03.config")) {
+        rows = 975;
+        config03.pos = new int*[rows];
+        for (int i = 0; i < rows; ++i) {
+            config03.pos[i] = new int[3]();
+        }
+        arr = config03.pos;
+    }
+
+    Serial.println("FileconfigName: " + filename);
+
+    while (configFile.available()) {
         line = configFile.readStringUntil('\n');
-        split(line, ',', config.pos, i);
-        Serial.print(config.pos[i][0]);
-        Serial.print(", ");
-        Serial.println(config.pos[i][1]);
-      }
+        line.trim();
+        if (line.startsWith("Name=")) {
+            if (filename.equals("/test01.config")) {
+                config01.name = line.substring(5); // Extract the name from the line
+                Serial.println("Config name: " + config01.name);
+                ESPUI.updateControlValue(nameText, config01.name);
+            } else if (filename.equals("/test02.config")) {
+                config02.name = line.substring(5); // Extract the name from the line
+                Serial.println("Config name: " + config02.name);
+                ESPUI.updateControlValue(nameText, config02.name);
+            } else if (filename.equals("/test03.config")) {
+                config03.name = line.substring(5); // Extract the name from the line
+                Serial.println("Config name: " + config03.name);
+                ESPUI.updateControlValue(nameText, config03.name);
+            }
+        } else if (line.startsWith("Loop=")) {
+            if (filename.equals("/test01.config")) {
+                config01.loop = line.substring(5).toInt(); // Convert loop value to integer
+                Serial.println("Loop value: " + String(config01.loop));
+                ESPUI.updateControlValue(loopText, String(config01.loop));
+            } else if (filename.equals("/test02.config")) {
+                config02.loop = line.substring(5).toInt(); // Convert loop value to integer
+                Serial.println("Loop value: " + String(config02.loop));
+                ESPUI.updateControlValue(loopText, String(config02.loop));
+            } else if (filename.equals("/test03.config")) {
+                config03.loop = line.substring(5).toInt(); // Convert loop value to integer
+                Serial.println("Loop value: " + String(config03.loop));
+                ESPUI.updateControlValue(loopText, String(config03.loop));
+            }
+        } else if (line.startsWith("Pos=")) {
+            if (filename.equals("/test01.config")) {
+                config01.numPos = line.substring(4).toInt(); // Convert numPos value to integer
+                Serial.println("Number of positions: " + String(config01.numPos));
+                ESPUI.updateControlValue(posText, String(config01.numPos));
+            } else if (filename.equals("/test02.config")) {
+                config02.numPos = line.substring(4).toInt(); // Convert numPos value to integer
+                Serial.println("Number of positions: " + String(config02.numPos));
+                ESPUI.updateControlValue(posText, String(config02.numPos));
+            } else if (filename.equals("/test03.config")) {
+                config03.numPos = line.substring(4).toInt(); // Convert numPos value to integer
+                Serial.println("Number of positions: " + String(config03.numPos));
+                ESPUI.updateControlValue(posText, String(config03.numPos));
+            }
+        } else if (line.startsWith("Move=")) {
+            Serial.println("Move positions:");
+            if (filename.equals("/test01.config")) {
+                for (int i = 0; i < config01.numPos; i++) {
+                    line = configFile.readStringUntil('\n');
+                    split(line, ',', config01.pos, i);
+                    Serial.print(config01.pos[i][0]);
+                    Serial.print(",");
+                    Serial.print(config01.pos[i][1]);
+                    Serial.print(",");
+                    Serial.println(config01.pos[i][2]);
+                }
+            } else if (filename.equals("/test02.config")) {
+                for (int i = 0; i < config02.numPos; i++) {
+                    line = configFile.readStringUntil('\n');
+                    split(line, ',', config02.pos, i);
+                    Serial.print(config02.pos[i][0]);
+                    Serial.print(",");
+                    Serial.print(config02.pos[i][1]);
+                    Serial.print(",");
+                    Serial.println(config02.pos[i][2]);
+                }
+            } else if (filename.equals("/test03.config")) {
+                for (int i = 0; i < config03.numPos; i++) {
+                    line = configFile.readStringUntil('\n');
+                    split(line, ',', config03.pos, i);
+                    Serial.print(config03.pos[i][0]);
+                    Serial.print(",");
+                    Serial.print(config03.pos[i][1]);
+                    Serial.print(",");
+                    Serial.println(config03.pos[i][2]);
+                }
+            }
+        }
     }
-  }
-  configFile.close();
+    configFile.close();
 
-  return true;
+    return true;
+}
+
+// Function to clean up dynamically allocated memory
+void cleanUp(Config01 &config01, Config02 &config02, Config03 &config03) {
+    if (config01.pos) {
+        for (int i = 0; i < 9; ++i) {
+            delete[] config01.pos[i];
+        }
+        delete[] config01.pos;
+    }
+    if (config02.pos) {
+        for (int i = 0; i < 1; ++i) {
+            delete[] config02.pos[i];
+        }
+        delete[] config02.pos;
+    }
+    if (config03.pos) {
+        for (int i = 0; i < 961; ++i) {
+            delete[] config03.pos[i];
+        }
+        delete[] config03.pos;
+    }
 }
 
 void listDir(fs::FS &fs, const char *dirname, uint8_t levels)
@@ -426,33 +514,39 @@ float readLoadCell()
     reading = scale.get_units(1);
     //    Serial.print("HX711 reading: ");
     //    Serial.println(reading);
+    if (reading >= 10 && reading <= 10){
+      float reading = 0;
+    }
+    
   } else {
     Serial.println("HX711 not found.");
   }
+
+  
   return reading;
 }
 
 void moveLeft()
 {
-  Serial.println("moveLeft");
-  delay(100);
+  // Serial.println("moveLeft");
+  // delay(100);
 }
 
 void moveRight()
 {
-  Serial.println("moveRight");
-  delay(100);
+  // Serial.println("moveRight");
+  // delay(100);
 }
 
 void lift()
 {
   Serial.println("lift");
-  delay(100);
+  // delay(100);
 }
 void down()
 {
   Serial.println("down");//
-  delay(100);
+  // delay(100);
 }
 
 void press()
@@ -464,7 +558,7 @@ void armLogic()
   lift();
   moveRight();
   down();
-  Serial.println(config.numPos);
+  Serial.println(config01.numPos);
 
 
 }
@@ -500,10 +594,12 @@ void moveAxisZ(Control* sender, int type)
   }
   previousZ = currentZ;
 }
+
+
 // This is the main function which builds our GUI
 void setUpUI() {
 
-  //Turn off verbose debugging
+  //Turn off verbose  ging
   ESPUI.setVerbosity(Verbosity::Quiet);
 
   //Make sliders continually report their position as they are being dragged.
@@ -597,13 +693,14 @@ void setUpUI() {
 
   nameText = ESPUI.addControl(ControlType::Text, "Name", "", ControlColor::None, settingTab, setTextInputCallback);
   loopText = ESPUI.addControl(ControlType::Text, "Loop", "", ControlColor::None, settingTab, setTextInputCallback);
-  posText = ESPUI.addControl(ControlType::Button, "Pattern", "3 X 3", ControlColor::None, settingTab, posButtonCallback);
 
-  // Add additional buttons under the posText control (parent control)
-  ESPUI.addControl(ControlType::Button, "", "1 Center point", ControlColor::None, posText, posButtonCallback);
-  ESPUI.addControl(ControlType::Button, "", "30 X 30", ControlColor::None, posText, posButtonCallback);
-
+  posText = ESPUI.addControl(Select, "Pattern", "", None, settingTab, setTextInputCallback);
+  ESPUI.addControl(Option, "3x3", "1", None, posText, setTextInputCallback);
+  ESPUI.addControl(Option, "Center Point", "2", None, posText, setTextInputCallback);
+  ESPUI.addControl(Option, "30x30", "3", None, posText, setTextInputCallback);
+  
   moveText = ESPUI.addControl(ControlType::Text, "Move", "", ControlColor::None, settingTab, setTextInputCallback);
+
   saveConfigButton = ESPUI.addControl(ControlType::Button, "Save Config", "Save", ControlColor::None, settingTab, configButtonCallback);
 
 
@@ -626,26 +723,20 @@ void setUpUI() {
   //This should only be called once we are connected to WiFi.
   ESPUI.begin(HOSTNAME);
 
-
-
 }
 
 //This callback generates and applies inline styles to a bunch of controls to change their colour.
 
-void posButtonCallback(Control *sender, int type) {
-  Control* pos_ = ESPUI.getControl(posText);
-  pos_->value = sender->value;
-  ESPUI.updateControl(pos_);
-  Serial.println(pos_->value);  // Print the updated value
-}
-
 void setTextInputCallback(Control *sender, int type) {
   Serial.println(sender->value);
   ESPUI.updateControl(sender);
+  /*Control* pos_ = ESPUI.getControl(posText);
+  Serial.println("posText: " + pos_->value);*/
+  
 }
 
 void configButtonCallback(Control *sender, int type) {
-  String file = "";
+  /*String file = "";
   if (type == B_UP) {
     Control* name_ = ESPUI.getControl(nameText);
     //  ESPUI.updateControl(nameText);
@@ -669,7 +760,7 @@ void configButtonCallback(Control *sender, int type) {
     config.name = name_->value;
     config.loop = loop_->value.toInt();
     config.numPos = pos_->value.toInt();
-  }
+  }*/
 }
 
 void styleCallback(Control *sender, int type) {
@@ -786,9 +877,9 @@ void loadResultCallback(Control *sender, int type) {
   Serial.println(sender->value);
   ESPUI.updateLabel(grouplabel2, String(fileName));
   ESPUI.updateControl(resultLabel);
-  //listDir(SD, "/", 0);
-  //readFile(SD, fileName.c_str());
-  //readFile(SD, "/server.log.2023-07-31");
+  //  listDir(SD, "/", 0);
+  // readFile(SD, fileName.c_str());
+  //  readFile(SD, "/server.log.2023-07-31");
   record.concat("Date/Time,Loop,Round,Value1,Value2,Value3,Value4,Value5,Value6,Value7,Value8,Value9,Value10,Value11,Value12,LoadCell\n");
   appendFile(SD, fileNameResult.c_str(), record.c_str());
   record = "";
@@ -915,9 +1006,6 @@ void setup() {
 #endif
   setUpUI();
 
-
-
-
   Wire.begin();
   Wire.setClock(800000); // Set I2C clock frequency to 400 kHz
   Serial.println("Getting differential reading from AIN0 (P) and AIN1 (N)");
@@ -1040,45 +1128,42 @@ void setup() {
   stepperZ.setAcceleration(6000);
   stepperZ.setCurrentPosition(0);
 
-  if (readConfig("/test01.config", config)) {
-    // Print configuration data in readConfig module
+
+  if (readConfig("/test01.config", config01, config02, config03)) {
+    // Print configuration data
 
   }
-  
-  if (readConfig("/test02.config", config)) {
-    // Print configuration data in readConfig module
-    
-  }
-  
-  Serial.print("Free heap memory: ");
-  Serial.print(ESP.getFreeHeap());
-  Serial.println(" bytes");
 
-  if (readConfig("/test03.config", config)) {
-    // Print configuration data in readConfig module
+  if (readConfig("/test02.config", config01, config02, config03)) {
+    // Print configuration data
+
   }
 
-  Serial.print("Free heap memory: ");
-  Serial.print(ESP.getFreeHeap());
-  Serial.println(" bytes");
+  if (readConfig("/test03.config", config01, config02, config03)) {
+    // Print configuration data
+
+  }
+
 
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
 
   scale.set_scale(CALIBRATION_FACTOR); // this value is obtained by calibrating the scale with known weights
   scale.set_offset(zero_factor);
   scale.tare();
+  
+
+  Serial.print("Free heap memory: ");
+  Serial.print(ESP.getFreeHeap());
+  Serial.println(" bytes");
 
 }
 
 void moveToStart() {
-  // Retrieve the Control object for posText
-  Control* posControl = ESPUI.getControl(posText);
+  //  Serial.println("move2start");
+  
+  Control* pos_ = ESPUI.getControl(posText);
 
-  // Get the value from the Control object and convert it to a C-string
-  const char* posValue = posControl->value.c_str();
-
-  // Perform actions based on the value
-  if (strcmp(posValue, "3x3") == 0) {
+  if (pos_->value.equals("1")){ //20x20 mm.
     stepperX.moveTo(-1000);
     stepperX.runToPosition();
     stepperX.setCurrentPosition(0);
@@ -1087,7 +1172,8 @@ void moveToStart() {
     stepperY.runToPosition();
     stepperY.setCurrentPosition(0);
   }
-  if (strcmp(posValue, "1 Center point") == 0) {
+
+  else if (pos_->value.equals("2")){
     stepperX.moveTo(0);
     stepperX.runToPosition();
     stepperX.setCurrentPosition(0);
@@ -1096,17 +1182,23 @@ void moveToStart() {
     stepperY.runToPosition();
     stepperY.setCurrentPosition(0);
   }
-  if (strcmp(posValue, "30x30") == 0) {
-    stepperX.moveTo(-10000);
-    stepperX.runToPosition();
-    stepperX.setCurrentPosition(0);
 
-    stepperY.moveTo(-10000);
-    stepperY.runToPosition();
-    stepperY.setCurrentPosition(0);
+  else if (pos_->value.equals("3")){ //300x300 mm.
+
+    for (int x = 0; x < 15; x++){
+      stepperX.moveTo(-1000);
+      stepperX.runToPosition();
+      stepperX.setCurrentPosition(0);
+  
+      stepperY.moveTo(-1000);
+      stepperY.runToPosition();
+      stepperY.setCurrentPosition(0);
+      }
+    
+
   }
-}
 
+}
 
 void loop() {
   static long unsigned lastTime = 0;
@@ -1121,7 +1213,7 @@ void loop() {
     lastTime = millis();
   }
 
-  //Simple debug UART interface
+  //Simple   UART interface
   if (Serial.available()) {
     switch (Serial.read()) {
       case 'w': //Print IP details
@@ -1143,7 +1235,7 @@ void loop() {
   //We don't need to call this explicitly on ESP32 but we do on 8266
   MDNS.update();
 #endif
-  if (isStopStart && (loopCount <= config.loop) ) {
+  if (isStopStart && (loopCount <= 100) ) {
     //    Serial.print("loopCount: ");
     //    Serial.println(loopCount);
     //    Serial.print("Loop: ");
@@ -1153,25 +1245,144 @@ void loop() {
     monthStr = String(tmstruct.tm_mon + 1, DEC);
 
 
-    for ( int x = 0; x < config.numPos; x++) {
+    Control* pos_ = ESPUI.getControl(posText);
+    
+    if (pos_->value.equals("1")){  //20x20 mm
+
+      Serial.println("test count: " + testCount);
+
+    for ( int x = 0; x < config01.numPos; x++) {
 
 
       int _value = 0;
-      //      Serial.print("x:");
-      //      Serial.print(config.pos[x][0]);
-      stepperX.moveTo(config.pos[x][0]);
+            Serial.print("x:");
+            Serial.print(config01.pos[x][0]);
+      stepperX.moveTo(config01.pos[x][0]);
       stepperX.runToPosition();
       stepperX.setCurrentPosition(0);
 
 
-      //      Serial.print("y:");
-      //      Serial.print(config.pos[x][1]);
-      stepperY.moveTo(config.pos[x][1]);
+            Serial.print("y:");
+            Serial.print(config01.pos[x][1]);
+      stepperY.moveTo(config01.pos[x][1]);
       stepperY.runToPosition();
       stepperY.setCurrentPosition(0);
       //      Serial.println("");
 
-      int depthPress = abs(config.pos[0][2]);
+      int depthPress = abs(config01.pos[0][2]);
+
+            Serial.println("press...");
+
+          
+      getLocalTime(&tmstruct, 5000);
+      dayStr = String(tmstruct.tm_mday, DEC);
+      hourStr = String(a0(tmstruct.tm_hour));
+      minStr = String(a0(tmstruct.tm_min));
+      secStr = String(a0(tmstruct.tm_sec));
+      dateTimeStr.concat(dayStr);
+      dateTimeStr.concat("/");
+      dateTimeStr.concat(monthStr);
+      dateTimeStr.concat("/");
+      dateTimeStr.concat(yearStr);
+      dateTimeStr.concat(" ");
+      dateTimeStr.concat(hourStr);
+      dateTimeStr.concat(":");
+      dateTimeStr.concat(minStr);
+      dateTimeStr.concat(":");
+      dateTimeStr.concat(secStr);
+      dateTimeStr.concat(",");
+
+      record.concat(dateTimeStr.c_str());
+
+      record.concat(loopCount);
+      record.concat(",");
+      record.concat(testCount);
+      record.concat(",");
+      testCount++;
+
+
+      //  Serial.println(depthPress);
+      stepperZ.moveTo(-400);
+      stepperZ.runToPosition();
+      stepperZ.setCurrentPosition(0);
+
+
+      
+      for (int i = 0; i < 4; i++)
+      {
+
+        for (int j = 0; j < 3; j++)
+        {
+
+
+          int16_t raw00 = ads[i].readADC(j);
+
+
+
+          float volt = ads[i].toVoltage(raw00);
+
+          //          Serial.print(volt); Serial.print(",");
+          record.concat(String(volt, 3));
+          record.concat(",");
+        }
+      }
+      //      Serial.println("");
+      
+ 
+      
+      stepperZ.moveTo(400);
+      stepperZ.runToPosition();
+      stepperZ.setCurrentPosition(0);
+      
+      
+      record.concat(readLoadCell());
+      scale.tare(); // reset the scale to 0
+      record.concat("\n");
+      
+
+
+
+      appendFile(SD, fileName.c_str(), record.c_str());
+
+
+
+      Serial.println(record);
+
+
+      dateTimeStr = "";
+      record = "";
+
+
+    if (testCount > config01.numPos) {
+     
+      testCount = 1;
+      moveToStart();
+
+    }
+          } 
+    }
+
+    else if (pos_->value.equals("2")){
+
+    for ( int x = 0; x < config02.numPos; x++) {
+
+
+      int _value = 0;
+            Serial.print("x:");
+            Serial.print(config02.pos[x][0]);
+      stepperX.moveTo(config02.pos[x][0]);
+      stepperX.runToPosition();
+      stepperX.setCurrentPosition(0);
+
+
+            Serial.print("y:");
+            Serial.print(config02.pos[x][1]);
+      stepperY.moveTo(config02.pos[x][1]);
+      stepperY.runToPosition();
+      stepperY.setCurrentPosition(0);
+      //      Serial.println("");
+
+      int depthPress = abs(config02.pos[0][2]);
 
       //      Serial.println("press...");
       getLocalTime(&tmstruct, 5000);
@@ -1204,6 +1415,109 @@ void loop() {
       stepperZ.moveTo(-400);
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
+
+      
+      for (int i = 0; i < 4; i++)
+      {
+
+        for (int j = 0; j < 3; j++)
+        {
+
+
+          int16_t raw00 = ads[i].readADC(j);
+
+
+
+          float volt = ads[i].toVoltage(raw00);
+
+          //          Serial.print(volt); Serial.print(",");
+          record.concat(String(volt, 3));
+          record.concat(",");
+        }
+      }
+      
+      
+      //      Serial.println("");
+      stepperZ.moveTo(400);
+      stepperZ.runToPosition();
+      stepperZ.setCurrentPosition(0);
+      record.concat(readLoadCell());
+      scale.tare(); // reset the scale to 0
+      record.concat("\n");
+
+      appendFile(SD, fileName.c_str(), record.c_str());
+
+      Serial.println(record);
+      dateTimeStr = "";
+      record = "";
+
+      
+    if (testCount > config02.numPos) {
+      
+      testCount = 1;
+      moveToStart();
+
+    }
+   
+    } 
+   }
+
+    else if (pos_->value.equals("3")){ //300x300 mm.
+
+      //if (){}
+
+    for ( int x = 0; x < config03.numPos; x++) {
+
+      int _value = 0;
+            Serial.print("x:");
+            Serial.print(config03.pos[x][0]);
+      stepperX.moveTo(config03.pos[x][0]);
+      stepperX.runToPosition();
+      stepperX.setCurrentPosition(0);
+
+
+            Serial.print("y:");
+            Serial.print(config03.pos[x][1]);
+      stepperY.moveTo(config03.pos[x][1]);
+      stepperY.runToPosition();
+      stepperY.setCurrentPosition(0);
+      //      Serial.println("");
+
+      int depthPress = abs(config03.pos[0][2]);
+
+      //      Serial.println("press...");
+      getLocalTime(&tmstruct, 5000);
+      dayStr = String(tmstruct.tm_mday, DEC);
+      hourStr = String(a0(tmstruct.tm_hour));
+      minStr = String(a0(tmstruct.tm_min));
+      secStr = String(a0(tmstruct.tm_sec));
+      dateTimeStr.concat(dayStr);
+      dateTimeStr.concat("/");
+      dateTimeStr.concat(monthStr);
+      dateTimeStr.concat("/");
+      dateTimeStr.concat(yearStr);
+      dateTimeStr.concat(" ");
+      dateTimeStr.concat(hourStr);
+      dateTimeStr.concat(":");
+      dateTimeStr.concat(minStr);
+      dateTimeStr.concat(":");
+      dateTimeStr.concat(secStr);
+      dateTimeStr.concat(",");
+
+      record.concat(dateTimeStr.c_str());
+
+      record.concat(loopCount);
+      record.concat(",");
+      record.concat(testCount);
+      record.concat(",");
+      testCount++;
+
+      //  Serial.println(depthPress);
+      stepperZ.moveTo(-400);
+      stepperZ.runToPosition();
+      stepperZ.setCurrentPosition(0);
+
+      
       for (int i = 0; i < 4; i++)
       {
 
@@ -1223,12 +1537,17 @@ void loop() {
         }
       }
       //      Serial.println("");
+      
+      
       stepperZ.moveTo(400);
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
+
+      
       record.concat(readLoadCell());
       scale.tare(); // reset the scale to 0
       record.concat("\n");
+      
 
       appendFile(SD, fileName.c_str(), record.c_str());
 
@@ -1236,14 +1555,21 @@ void loop() {
       dateTimeStr = "";
       record = "";
 
+      
 
-    }
-
-    if (testCount >= config.numPos) {
+    if (testCount > config03.numPos) {
+      
       testCount = 1;
       moveToStart();
 
     }
+    
+    
+
+
+      } 
+    }
+
     loopCount++;
     ESPUI.updateLabel(mainLabel, String(loopCount));
 
@@ -1251,9 +1577,12 @@ void loop() {
     isStopStart = false;
     //    loopCount = 0;
   }
-  
+
+
 
 }
+
+
 
 
 //Utilities
@@ -1344,7 +1673,7 @@ void enterWifiDetailsCallback(Control * sender, int type) {
     EEPROM.write(i + 32, '\0');
     EEPROM.end();
   }
-}
+}  
 
 
 
