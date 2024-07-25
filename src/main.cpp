@@ -1515,10 +1515,14 @@ void loop() {
       testCount++;
 
       //  Serial.println(depthPress);
-      stepperZ.moveTo(-400);
-      stepperZ.runToPosition();
-      stepperZ.setCurrentPosition(0);
+      if (depthPress == 4){
 
+        stepperZ.moveTo(-400);
+        stepperZ.runToPosition();
+        stepperZ.setCurrentPosition(0);
+
+
+      }
       
       for (int i = 0; i < 4; i++)
       {
@@ -1540,11 +1544,13 @@ void loop() {
       }
       //      Serial.println("");
       
-      
-      stepperZ.moveTo(400);
-      stepperZ.runToPosition();
-      stepperZ.setCurrentPosition(0);
+      if (depthPress == 4){
 
+        stepperZ.moveTo(400);
+        stepperZ.runToPosition();
+        stepperZ.setCurrentPosition(0);
+
+      }
       
       record.concat(readLoadCell());
       scale.tare(); // reset the scale to 0
