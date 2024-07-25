@@ -212,7 +212,7 @@ bool readConfig(const String &filename, Config01 &config01, Config02 &config02, 
         }
         arr = config02.pos;
     } else if (filename.equals("/test03.config")) {
-        rows = 975;
+        rows = 990;
         config03.pos = new int*[rows];
         for (int i = 0; i < rows; ++i) {
             config03.pos[i] = new int[3]();
@@ -514,8 +514,8 @@ float readLoadCell()
     reading = scale.get_units(1);
     //    Serial.print("HX711 reading: ");
     //    Serial.println(reading);
-    if (reading >= 10 && reading <= 10){
-      float reading = 0;
+    if (reading < 10 || reading > -10){
+      reading = 0;
     }
     
   } else {
@@ -1189,9 +1189,9 @@ void moveToStart() {
       stepperX.moveTo(-1000);
       stepperX.runToPosition();
       stepperX.setCurrentPosition(0);
-      }
-      
-    for (int x = 0; x < 15; x++){  
+    }
+
+    for (int x = 0; x < 15; x++){
       stepperY.moveTo(-1000);
       stepperY.runToPosition();
       stepperY.setCurrentPosition(0);
@@ -1418,6 +1418,7 @@ void loop() {
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
 
+      delay(3000);
       
       for (int i = 0; i < 4; i++)
       {
@@ -1471,21 +1472,21 @@ void loop() {
     for ( int x = 0; x < config03.numPos; x++) {
 
       int _value = 0;
-            Serial.print("x:");
-            Serial.print(config03.pos[x][0]);
+            Serial.println("x: " + config03.pos[x][0]);
       stepperX.moveTo(config03.pos[x][0]);
       stepperX.runToPosition();
       stepperX.setCurrentPosition(0);
 
 
-            Serial.print("y:");
-            Serial.print(config03.pos[x][1]);
+            Serial.println("y: " + config03.pos[x][1]);
       stepperY.moveTo(config03.pos[x][1]);
       stepperY.runToPosition();
       stepperY.setCurrentPosition(0);
       //      Serial.println("");
 
-      int depthPress = abs(config03.pos[0][2]);
+      int depthPress = abs(config03.pos[x][2]);
+
+      Serial.println("depthPress: " + depthPress);
 
       //      Serial.println("press...");
       getLocalTime(&tmstruct, 5000);
@@ -1516,13 +1517,13 @@ void loop() {
 
       //  Serial.println(depthPress);
       if (depthPress == 4){
-
         stepperZ.moveTo(-400);
         stepperZ.runToPosition();
         stepperZ.setCurrentPosition(0);
+      
+        }
+      
 
-
-      }
       
       for (int i = 0; i < 4; i++)
       {
@@ -1545,11 +1546,9 @@ void loop() {
       //      Serial.println("");
       
       if (depthPress == 4){
-
-        stepperZ.moveTo(400);
-        stepperZ.runToPosition();
-        stepperZ.setCurrentPosition(0);
-
+      stepperZ.moveTo(400);
+      stepperZ.runToPosition();
+      stepperZ.setCurrentPosition(0);
       }
       
       record.concat(readLoadCell());
@@ -1583,7 +1582,7 @@ void loop() {
 
   } else {
     isStopStart = false;
-    //    loopCount = 0;
+        loopCount = 0;
   }
 
 
