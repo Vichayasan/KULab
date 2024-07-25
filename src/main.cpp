@@ -1189,7 +1189,9 @@ void moveToStart() {
       stepperX.moveTo(-1000);
       stepperX.runToPosition();
       stepperX.setCurrentPosition(0);
-  
+      }
+      
+    for (int x = 0; x < 15; x++){  
       stepperY.moveTo(-1000);
       stepperY.runToPosition();
       stepperY.setCurrentPosition(0);
