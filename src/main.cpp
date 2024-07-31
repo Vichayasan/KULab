@@ -52,13 +52,20 @@ String fileNameResult = "";
 const int LOADCELL_DOUT_PIN = 26;
 const int LOADCELL_SCK_PIN = 25;
 // REPLACE WITH YOUR CALIBRATION FACTOR
-#define CALIBRATION_FACTOR 184.703557312253
+#define CALIBRATION_FACTOR 184.703557312253  // 184.703557312253
+//0.256
 
-#define zero_factor 58700
+#define zero_factor 58744
 
 #define DEC_POINT  3
 HX711 scale;
-ADS1115 ads[4]; // Array to store ADS1115 objects
+
+//ADS1115 ads[4];// Array to store ADS1115 objects
+ADS1115 ads01(0x48);
+ADS1115 ads02(0x49);
+ADS1115 ads03(0x4A);
+ADS1115 ads04(0x4B);
+
 File myFile;
 ESP32Time rtc;
 
@@ -88,11 +95,8 @@ String record = "";
 //String htmlView = "";
 struct tm tmstruct;
 // WiFi credentials
-const char *ssid = "TP-Link_AD28";  //TP-Link_AD28
-const char *password = "96969755"; //96969755
-
-
-
+const char *ssid = "TP-Link_5080";  //TP-Link_AD28
+const char *password = "70254211"; //96969755
 
 String dateTimeStr = "";
 long timezone = 7;
@@ -242,62 +246,62 @@ bool readConfig(const String &filename, Config01 &config01, Config02 &config02, 
         } else if (line.startsWith("Loop=")) {
             if (filename.equals("/test01.config")) {
                 config01.loop = line.substring(5).toInt(); // Convert loop value to integer
-                Serial.println("Loop value: " + String(config01.loop));
+                //Serial.println("Loop value: " + String(config01.loop));
                 ESPUI.updateControlValue(loopText, String(config01.loop));
             } else if (filename.equals("/test02.config")) {
                 config02.loop = line.substring(5).toInt(); // Convert loop value to integer
-                Serial.println("Loop value: " + String(config02.loop));
+                //Serial.println("Loop value: " + String(config02.loop));
                 ESPUI.updateControlValue(loopText, String(config02.loop));
             } else if (filename.equals("/test03.config")) {
                 config03.loop = line.substring(5).toInt(); // Convert loop value to integer
-                Serial.println("Loop value: " + String(config03.loop));
+                //Serial.println("Loop value: " + String(config03.loop));
                 ESPUI.updateControlValue(loopText, String(config03.loop));
             }
         } else if (line.startsWith("Pos=")) {
             if (filename.equals("/test01.config")) {
                 config01.numPos = line.substring(4).toInt(); // Convert numPos value to integer
-                Serial.println("Number of positions: " + String(config01.numPos));
+                //Serial.println("Number of positions: " + String(config01.numPos));
                 ESPUI.updateControlValue(posText, String(config01.numPos));
             } else if (filename.equals("/test02.config")) {
                 config02.numPos = line.substring(4).toInt(); // Convert numPos value to integer
-                Serial.println("Number of positions: " + String(config02.numPos));
+                //Serial.println("Number of positions: " + String(config02.numPos));
                 ESPUI.updateControlValue(posText, String(config02.numPos));
             } else if (filename.equals("/test03.config")) {
                 config03.numPos = line.substring(4).toInt(); // Convert numPos value to integer
-                Serial.println("Number of positions: " + String(config03.numPos));
+                //Serial.println("Number of positions: " + String(config03.numPos));
                 ESPUI.updateControlValue(posText, String(config03.numPos));
             }
         } else if (line.startsWith("Move=")) {
-            Serial.println("Move positions:");
+            //  Serial.println("Move positions:");
             if (filename.equals("/test01.config")) {
                 for (int i = 0; i < config01.numPos; i++) {
                     line = configFile.readStringUntil('\n');
                     split(line, ',', config01.pos, i);
-                    Serial.print(config01.pos[i][0]);
+                    /*Serial.print(config01.pos[i][0]);
                     Serial.print(",");
                     Serial.print(config01.pos[i][1]);
                     Serial.print(",");
-                    Serial.println(config01.pos[i][2]);
+                    Serial.println(config01.pos[i][2]);*/
                 }
             } else if (filename.equals("/test02.config")) {
                 for (int i = 0; i < config02.numPos; i++) {
                     line = configFile.readStringUntil('\n');
                     split(line, ',', config02.pos, i);
-                    Serial.print(config02.pos[i][0]);
+                    /*Serial.print(config02.pos[i][0]);
                     Serial.print(",");
                     Serial.print(config02.pos[i][1]);
                     Serial.print(",");
-                    Serial.println(config02.pos[i][2]);
+                    Serial.println(config02.pos[i][2]);*/
                 }
             } else if (filename.equals("/test03.config")) {
                 for (int i = 0; i < config03.numPos; i++) {
                     line = configFile.readStringUntil('\n');
                     split(line, ',', config03.pos, i);
-                    Serial.print(config03.pos[i][0]);
+                    /*Serial.print(config03.pos[i][0]);
                     Serial.print(",");
                     Serial.print(config03.pos[i][1]);
                     Serial.print(",");
-                    Serial.println(config03.pos[i][2]);
+                    Serial.println(config03.pos[i][2]);*/
                 }
             }
         }
@@ -510,13 +514,17 @@ float readLoadCell()
 
 
   float reading = 0;
+  float offset = 330;
   if (scale.is_ready()) {
-    reading = scale.get_units(1);
-    //    Serial.print("HX711 reading: ");
-    //    Serial.println(reading);
-    if (reading < 10 || reading > -10){
-      reading = 0;
-    }
+    reading = abs(scale.get_units());
+        /*Serial.print("HX711 reading: ");
+        Serial.println(reading);*/
+    /**/  if (reading < 10){
+      reading = 0;  
+    } /**/
+    /**/ else {
+      reading = reading + offset;
+      } /**/
     
   } else {
     Serial.println("HX711 not found.");
@@ -630,10 +638,6 @@ void setUpUI() {
   ESPUI.addControl(Switcher, "", "1", Sunflower, grouplabel, startButtonCallback);
   ESPUI.setElementStyle(grouplabel2, "font-size: x-large; font-family: serif;");
 
-
-
-
-
   auto resulttab = ESPUI.addControl(Tab, "", "Results");
 
   /*
@@ -643,13 +647,8 @@ void setUpUI() {
       -----------------------------------------------------------------------------------------------------------*/
   ESPUI.addControl(Separator, "Result download", "", None, resulttab);
 
-
-
-
   //The parent of this button is a tab, so it will create a new panel with one control.
   auto groupbutton = ESPUI.addControl(Button, "Reload results", "Reload", Dark, resulttab, loadResultCallback);
-
-
 
   resultLabel = ESPUI.addControl(Label, "Result", String(fileName), Emerald, resulttab, loadResultCallback);
   selectDownload = ESPUI.addControl( ControlType::Select, "Select Title", "", Emerald, resultLabel );
@@ -658,8 +657,6 @@ void setUpUI() {
 
 
   ESPUI.updateLabel(resultLabel, String(fileNameResult));
-
-
 
   /*
      Tab: Example UI
@@ -702,8 +699,6 @@ void setUpUI() {
   moveText = ESPUI.addControl(ControlType::Text, "Move", "", ControlColor::None, settingTab, setTextInputCallback);
 
   saveConfigButton = ESPUI.addControl(ControlType::Button, "Save Config", "Save", ControlColor::None, settingTab, configButtonCallback);
-
-
 
   /*
      Tab: WiFi Credentials
@@ -927,8 +922,6 @@ void moveAxisXY(Control *sender, int type) {
     stepperY.setCurrentPosition(0);
   }
 
-
-
 }
 
 // Most elements in this test UI are assigned this generic callback which prints some
@@ -1079,25 +1072,22 @@ void setup() {
   uint64_t cardSize = SD.cardSize() / (1024 * 1024);
   Serial.printf("SD Card Size: %lluMB\n", cardSize);
 
+  ads01.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
+  ads01.setDataRate(4);
+  if(!ads01.begin()) Serial.println("Not found ads01");
+  
+  ads02.setGain(3); // 4x gain   +/- 1._024V  1 bit = 0.5mV    0.03125mV
+  ads02.setDataRate(4);
+  if(!ads02.begin()) Serial.println("Not found ads02");
 
+  ads03.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
+  ads03.setDataRate(4);
+  if(!ads03.begin()) Serial.println("Not found ads03");
 
+  ads04.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
+  ads04.setDataRate(4);
+  if(!ads04.begin()) Serial.println("Not found ads04");
 
-
-  ads[0].setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
-  ads[0].setDataRate(4);
-  ads[0].begin();
-
-  ads[1].setGain(3); // 4x gain   +/- 1._024V  1 bit = 0.5mV    0.03125mV
-  ads[1].setDataRate(4);
-  ads[1].begin();
-
-  ads[2].setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
-  ads[2].setDataRate(4);
-  ads[2].begin();
-
-  ads[3].setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
-  ads[3].setDataRate(4);
-  ads[3].begin();
   diff = millis();
 
   // Initialize SD card
@@ -1238,10 +1228,10 @@ void loop() {
   MDNS.update();
 #endif
   if (isStopStart && (loopCount <= 100) ) {
-    //    Serial.print("loopCount: ");
-    //    Serial.println(loopCount);
-    //    Serial.print("Loop: ");
-    //    Serial.println(config.loop);
+        //Serial.print("loopCount: ");
+        //Serial.println(loopCount);
+        //Serial.print("Loop: ");
+        //Serial.println(config.loop);
 
     yearStr = String(tmstruct.tm_year + 1900, DEC);
     monthStr = String(tmstruct.tm_mon + 1, DEC);
@@ -1257,15 +1247,15 @@ void loop() {
 
 
       int _value = 0;
-            Serial.print("x:");
-            Serial.print(config01.pos[x][0]);
+      //      Serial.print("x:");
+      //      Serial.print(config01.pos[x][0]);
       stepperX.moveTo(config01.pos[x][0]);
       stepperX.runToPosition();
       stepperX.setCurrentPosition(0);
 
 
-            Serial.print("y:");
-            Serial.print(config01.pos[x][1]);
+      //      Serial.print("y:");
+      //      Serial.print(config01.pos[x][1]);
       stepperY.moveTo(config01.pos[x][1]);
       stepperY.runToPosition();
       stepperY.setCurrentPosition(0);
@@ -1273,8 +1263,14 @@ void loop() {
 
       int depthPress = abs(config01.pos[0][2]);
 
-            Serial.println("press...");
+      //      Serial.println("press...");
 
+      //  Serial.println(depthPress);
+      stepperZ.moveTo(-400);
+      stepperZ.runToPosition();
+      stepperZ.setCurrentPosition(0);
+
+      for (int z = 0; z < 4; z++){
           
       getLocalTime(&tmstruct, 5000);
       dayStr = String(tmstruct.tm_mday, DEC);
@@ -1302,13 +1298,7 @@ void loop() {
       record.concat(",");
       testCount++;
 
-
-      //  Serial.println(depthPress);
-      stepperZ.moveTo(-400);
-      stepperZ.runToPosition();
-      stepperZ.setCurrentPosition(0);
-
-
+      //delayMicroseconds(5);
       
       for (int i = 0; i < 4; i++)
       {
@@ -1317,29 +1307,39 @@ void loop() {
         {
 
 
-          int16_t raw00 = ads[i].readADC(j);
+          //int16_t raw00 = ads[i].readADC(j);
 
 
 
-          float volt = ads[i].toVoltage(raw00);
+          //float volt = ads[i].toVoltage(raw00);
 
           //          Serial.print(volt); Serial.print(",");
-          record.concat(String(volt, 3));
-          record.concat(",");
+          //record.concat(String(volt, 3));
+          //record.concat(",");
         }
       }
-      //      Serial.println("");
+
+      record.concat(readLoadCell());
+      record.concat("\n");
+      Serial.println(record);
+      appendFile(SD, fileName.c_str(), record.c_str());
+      dateTimeStr = "";
+      record = "";
+      delayMicroseconds(1000000);
+      }
+
+      record.concat("\n");
       
- 
+      //      Serial.println("");
       
       stepperZ.moveTo(400);
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
       
       
-      record.concat(readLoadCell());
+      //record.concat(readLoadCell());
       scale.tare(); // reset the scale to 0
-      record.concat("\n");
+      /*record.concat("\n");
       
 
 
@@ -1352,7 +1352,7 @@ void loop() {
 
 
       dateTimeStr = "";
-      record = "";
+      record = "";*/
 
 
     if (testCount > config01.numPos) {
@@ -1370,23 +1370,32 @@ void loop() {
 
 
       int _value = 0;
-            Serial.print("x:");
-            Serial.print(config02.pos[x][0]);
+      //      Serial.print("x:");
+      //      Serial.print(config02.pos[x][0]);
       stepperX.moveTo(config02.pos[x][0]);
       stepperX.runToPosition();
       stepperX.setCurrentPosition(0);
 
 
-            Serial.print("y:");
-            Serial.print(config02.pos[x][1]);
+      //      Serial.print("y:");
+      //      Serial.print(config02.pos[x][1]);
       stepperY.moveTo(config02.pos[x][1]);
       stepperY.runToPosition();
       stepperY.setCurrentPosition(0);
       //      Serial.println("");
 
-      int depthPress = abs(config02.pos[0][2]);
+      //int depthPress = abs(config02.pos[0][2]);
 
       //      Serial.println("press...");
+        Serial.println("depthPress");
+      stepperZ.moveTo(-400);
+      stepperZ.runToPosition();
+      stepperZ.setCurrentPosition(0);
+
+      //delayMicroseconds(5);
+      
+      for (int z = 0; z < 4; z++){
+        
       getLocalTime(&tmstruct, 5000);
       dayStr = String(tmstruct.tm_mday, DEC);
       hourStr = String(a0(tmstruct.tm_hour));
@@ -1413,46 +1422,79 @@ void loop() {
       record.concat(",");
       testCount++;
 
-      //  Serial.println(depthPress);
-      stepperZ.moveTo(-400);
-      stepperZ.runToPosition();
-      stepperZ.setCurrentPosition(0);
-
-      delay(3000);
       
       for (int i = 0; i < 4; i++)
       {
 
         for (int j = 0; j < 3; j++)
         {
+          float volt;
 
+          if ( i == 0){
+            int16_t raw00 = ads01.readADC(j);
+  
+            float volt = ads01.toVoltage(raw00);
 
-          int16_t raw00 = ads[i].readADC(j);
+            record.concat(String(volt, 3));
+          record.concat(",");
+            }
+          else if ( i == 1){
+            int16_t raw00 = ads02.readADC(j);
+  
+            float volt = ads02.toVoltage(raw00);
 
+            record.concat(String(volt, 3));
+          record.concat(",");
+            }
+          else if ( i == 2){
+            int16_t raw00 = ads03.readADC(j);
+  
+            float volt = ads03.toVoltage(raw00);
 
+            record.concat(String(volt, 3));
+          record.concat(",");
+            }
 
-          float volt = ads[i].toVoltage(raw00);
+          else if ( i == 3){
+            int16_t raw00 = ads04.readADC(j);
+  
+            float volt = ads04.toVoltage(raw00);
+
+            record.concat(String(volt, 3));
+          record.concat(",");
+            }
+          
 
           //          Serial.print(volt); Serial.print(",");
-          record.concat(String(volt, 3));
-          record.concat(",");
+                    
         }
+
+
+        
       }
+      record.concat(readLoadCell());
+      record.concat("\n");
+      Serial.println(record);
+      appendFile(SD, fileName.c_str(), record.c_str());
+      dateTimeStr = "";
+      record = "";
+      delayMicroseconds(1000000);
+      }
+
+      record.concat("\n");
       
-      
-      //      Serial.println("");
       stepperZ.moveTo(400);
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
-      record.concat(readLoadCell());
+      //record.concat(readLoadCell());
       scale.tare(); // reset the scale to 0
-      record.concat("\n");
+      //record.concat("\n");
 
-      appendFile(SD, fileName.c_str(), record.c_str());
+      
 
-      Serial.println(record);
+      /*Serial.println(record);
       dateTimeStr = "";
-      record = "";
+      record = "";*/
 
       
     if (testCount > config02.numPos) {
@@ -1472,13 +1514,13 @@ void loop() {
     for ( int x = 0; x < config03.numPos; x++) {
 
       int _value = 0;
-            Serial.println("x: " + config03.pos[x][0]);
+      //      Serial.println("x: " + config03.pos[x][0]);
       stepperX.moveTo(config03.pos[x][0]);
       stepperX.runToPosition();
       stepperX.setCurrentPosition(0);
 
 
-            Serial.println("y: " + config03.pos[x][1]);
+      //      Serial.println("y: " + config03.pos[x][1]);
       stepperY.moveTo(config03.pos[x][1]);
       stepperY.runToPosition();
       stepperY.setCurrentPosition(0);
@@ -1486,7 +1528,11 @@ void loop() {
 
       int depthPress = abs(config03.pos[x][2]);
 
-      Serial.println("depthPress: " + depthPress);
+      //      Serial.println("depthPress: " + depthPress);
+
+      if (depthPress == 4){
+
+            for (int z = 0; z < 4; z++){
 
       //      Serial.println("press...");
       getLocalTime(&tmstruct, 5000);
@@ -1516,14 +1562,13 @@ void loop() {
       testCount++;
 
       //  Serial.println(depthPress);
-      if (depthPress == 4){
         stepperZ.moveTo(-400);
         stepperZ.runToPosition();
         stepperZ.setCurrentPosition(0);
-      
-        }
-      
 
+        //delayMicroseconds(5000);
+        
+    
       
       for (int i = 0; i < 4; i++)
       {
@@ -1532,35 +1577,43 @@ void loop() {
         {
 
 
-          int16_t raw00 = ads[i].readADC(j);
+          //int16_t raw00 = ads[i].readADC(j);
 
-
-
-          float volt = ads[i].toVoltage(raw00);
+          //float volt = ads[i].toVoltage(raw00);
 
           //          Serial.print(volt); Serial.print(",");
-          record.concat(String(volt, 3));
-          record.concat(",");
+          //record.concat(String(volt, 3));
+          //record.concat(",");
         }
       }
       //      Serial.println("");
+
+      record.concat(readLoadCell());
+      record.concat("\n");
+      Serial.println(record);
+      appendFile(SD, fileName.c_str(), record.c_str());
+      dateTimeStr = "";
+      record = "";
+      delayMicroseconds(1000000);
+      }
+
+      record.concat("\n");
       
-      if (depthPress == 4){
       stepperZ.moveTo(400);
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
-      }
       
       record.concat(readLoadCell());
       scale.tare(); // reset the scale to 0
-      record.concat("\n");
+      /*record.concat("\n");
       
 
       appendFile(SD, fileName.c_str(), record.c_str());
 
       Serial.println(record);
       dateTimeStr = "";
-      record = "";
+      record = "";*/
+    }
 
       
 
