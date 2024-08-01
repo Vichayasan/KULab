@@ -95,8 +95,8 @@ String record = "";
 //String htmlView = "";
 struct tm tmstruct;
 // WiFi credentials
-const char *ssid = "TP-Link_5080";  //TP-Link_AD28
-const char *password = "70254211"; //96969755
+const char *ssid = "TP-Link_0B37";  //TP-Link_AD28  TP-Link_5080
+const char *password = "11741428"; //96969755 70254211
 
 String dateTimeStr = "";
 long timezone = 7;
@@ -454,7 +454,7 @@ void writeFile(fs::FS &fs, const char *path, const char *message)
 
 void appendFile(fs::FS &fs, const char *path, const char *message)
 {
-  // Serial.printf("Appending to file: %s\n", path);
+  Serial.printf("Appending to file: %s\n", path);
 
   File file = fs.open(path, FILE_APPEND);
   if (!file)
@@ -464,7 +464,7 @@ void appendFile(fs::FS &fs, const char *path, const char *message)
   }
   if (file.print(message))
   {
-    // Serial.println("Message appended");
+    //  Serial.println("Message appended");
   }
   else
   {
@@ -514,7 +514,7 @@ float readLoadCell()
 
 
   float reading = 0;
-  float offset = 330;
+  float offset = 940;
   if (scale.is_ready()) {
     reading = abs(scale.get_units());
         /*Serial.print("HX711 reading: ");
@@ -711,7 +711,8 @@ void setUpUI() {
   wifi_pass_text = ESPUI.addControl(Text, "Password", "", Alizarin, wifitab, textCallback);
   ESPUI.addControl(Max, "   ", "64", None, wifi_pass_text);
   ESPUI.addControl(Button, "Save", "Save", Peterriver, wifitab, enterWifiDetailsCallback);
-  String printValue = "Download<script>document.getElementById('btn12').onclick = function() {location.replace('/file?filename=/' + document.querySelector('#select11').value)};fetch('/filelist').then(function(data){return data.text()}).then(function(text){console.log(text.split('\\n').forEach(function(i){var option = document.createElement('option');option.value = i;option.innerText = i;document.querySelector('#select11').append(option);}))})</script>";
+  
+  String printValue = "Download<script>document.getElementById('btn12').onclick = function() {var d = document.createElement('a');d.href = '/download/' + document.querySelector('#select11').value;d.download = document.querySelector('#select11').value; d.click()};fetch('/filelist').then(function(data){return data.text()}).then(function(text){console.log(text.split('\\n').forEach(function(i){var option = document.createElement('option');option.value = i;option.innerText = i;document.querySelector('#select11').append(option);}))})</script>";
   ESPUI.print(downloadButton, printValue);
 
   //Finally, start up the UI.
@@ -1282,13 +1283,16 @@ void loop() {
       dateTimeStr.concat(monthStr);
       dateTimeStr.concat("/");
       dateTimeStr.concat(yearStr);
+      dateTimeStr.concat(",");
       dateTimeStr.concat(" ");
+
       dateTimeStr.concat(hourStr);
       dateTimeStr.concat(":");
       dateTimeStr.concat(minStr);
       dateTimeStr.concat(":");
       dateTimeStr.concat(secStr);
       dateTimeStr.concat(",");
+      dateTimeStr.concat(" ");
 
       record.concat(dateTimeStr.c_str());
 
@@ -1296,33 +1300,55 @@ void loop() {
       record.concat(",");
       record.concat(testCount);
       record.concat(",");
+      record.concat(" ");
       testCount++;
-
-      //delayMicroseconds(5);
       
       for (int i = 0; i < 4; i++)
       {
 
         for (int j = 0; j < 3; j++)
         {
+          if ( i == 0){
+            int16_t raw00 = ads01.readADC(j);
+  
+            float volt = ads01.toVoltage(raw00);
 
+            record.concat(String(volt, 4));
+          record.concat(",");
+            }
+          else if ( i == 1){
+            int16_t raw00 = ads02.readADC(j);
+  
+            float volt = ads02.toVoltage(raw00);
 
-          //int16_t raw00 = ads[i].readADC(j);
+            record.concat(String(volt, 4));
+          record.concat(",");
+            }
+          else if ( i == 2){
+            int16_t raw00 = ads03.readADC(j);
+  
+            float volt = ads03.toVoltage(raw00);
 
+            record.concat(String(volt, 4));
+          record.concat(",");
+            }
 
+          else if ( i == 3){
+            int16_t raw00 = ads04.readADC(j);
+  
+            float volt = ads04.toVoltage(raw00);
 
-          //float volt = ads[i].toVoltage(raw00);
-
-          //          Serial.print(volt); Serial.print(",");
-          //record.concat(String(volt, 3));
-          //record.concat(",");
+            record.concat(String(volt, 4));
+          record.concat(",");
+            }
         }
       }
 
       record.concat(readLoadCell());
       record.concat("\n");
-      Serial.println(record);
+      
       appendFile(SD, fileName.c_str(), record.c_str());
+      Serial.println(record);
       dateTimeStr = "";
       record = "";
       delayMicroseconds(1000000);
@@ -1339,21 +1365,6 @@ void loop() {
       
       //record.concat(readLoadCell());
       scale.tare(); // reset the scale to 0
-      /*record.concat("\n");
-      
-
-
-
-      appendFile(SD, fileName.c_str(), record.c_str());
-
-
-
-      Serial.println(record);
-
-
-      dateTimeStr = "";
-      record = "";*/
-
 
     if (testCount > config01.numPos) {
      
@@ -1391,8 +1402,6 @@ void loop() {
       stepperZ.moveTo(-400);
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
-
-      //delayMicroseconds(5);
       
       for (int z = 0; z < 4; z++){
         
@@ -1406,15 +1415,19 @@ void loop() {
       dateTimeStr.concat(monthStr);
       dateTimeStr.concat("/");
       dateTimeStr.concat(yearStr);
+      dateTimeStr.concat(",");
       dateTimeStr.concat(" ");
       dateTimeStr.concat(hourStr);
       dateTimeStr.concat(":");
       dateTimeStr.concat(minStr);
       dateTimeStr.concat(":");
       dateTimeStr.concat(secStr);
+      dateTimeStr.concat(":");
+      //dateTimeStr.concat(millis()%1000);
       dateTimeStr.concat(",");
 
       record.concat(dateTimeStr.c_str());
+      record.concat(" ");
 
       record.concat(loopCount);
       record.concat(",");
@@ -1428,14 +1441,13 @@ void loop() {
 
         for (int j = 0; j < 3; j++)
         {
-          float volt;
 
           if ( i == 0){
             int16_t raw00 = ads01.readADC(j);
   
             float volt = ads01.toVoltage(raw00);
 
-            record.concat(String(volt, 3));
+            record.concat(String(volt, 4));
           record.concat(",");
             }
           else if ( i == 1){
@@ -1443,7 +1455,7 @@ void loop() {
   
             float volt = ads02.toVoltage(raw00);
 
-            record.concat(String(volt, 3));
+            record.concat(String(volt, 4));
           record.concat(",");
             }
           else if ( i == 2){
@@ -1451,7 +1463,7 @@ void loop() {
   
             float volt = ads03.toVoltage(raw00);
 
-            record.concat(String(volt, 3));
+            record.concat(String(volt, 4));
           record.concat(",");
             }
 
@@ -1460,7 +1472,7 @@ void loop() {
   
             float volt = ads04.toVoltage(raw00);
 
-            record.concat(String(volt, 3));
+            record.concat(String(volt, 4));
           record.concat(",");
             }
           
@@ -1468,18 +1480,16 @@ void loop() {
           //          Serial.print(volt); Serial.print(",");
                     
         }
-
-
-        
+    
       }
       record.concat(readLoadCell());
       record.concat("\n");
-      Serial.println(record);
       appendFile(SD, fileName.c_str(), record.c_str());
+      Serial.println(record);
       dateTimeStr = "";
       record = "";
       delayMicroseconds(1000000);
-      }
+      }      
 
       record.concat("\n");
       
@@ -1489,13 +1499,6 @@ void loop() {
       //record.concat(readLoadCell());
       scale.tare(); // reset the scale to 0
       //record.concat("\n");
-
-      
-
-      /*Serial.println(record);
-      dateTimeStr = "";
-      record = "";*/
-
       
     if (testCount > config02.numPos) {
       
@@ -1508,8 +1511,6 @@ void loop() {
    }
 
     else if (pos_->value.equals("3")){ //300x300 mm.
-
-      //if (){}
 
     for ( int x = 0; x < config03.numPos; x++) {
 
@@ -1545,6 +1546,7 @@ void loop() {
       dateTimeStr.concat(monthStr);
       dateTimeStr.concat("/");
       dateTimeStr.concat(yearStr);
+      dateTimeStr.concat(",");
       dateTimeStr.concat(" ");
       dateTimeStr.concat(hourStr);
       dateTimeStr.concat(":");
@@ -1552,6 +1554,7 @@ void loop() {
       dateTimeStr.concat(":");
       dateTimeStr.concat(secStr);
       dateTimeStr.concat(",");
+      dateTimeStr.concat(" ");
 
       record.concat(dateTimeStr.c_str());
 
@@ -1559,6 +1562,7 @@ void loop() {
       record.concat(",");
       record.concat(testCount);
       record.concat(",");
+      dateTimeStr.concat(" ");
       testCount++;
 
       //  Serial.println(depthPress);
@@ -1575,15 +1579,39 @@ void loop() {
 
         for (int j = 0; j < 3; j++)
         {
+          if ( i == 0){
+            int16_t raw00 = ads01.readADC(j);
+  
+            float volt = ads01.toVoltage(raw00);
 
+            record.concat(String(volt, 4));
+          record.concat(",");
+            }
+          else if ( i == 1){
+            int16_t raw00 = ads02.readADC(j);
+  
+            float volt = ads02.toVoltage(raw00);
 
-          //int16_t raw00 = ads[i].readADC(j);
+            record.concat(String(volt, 4));
+          record.concat(",");
+            }
+          else if ( i == 2){
+            int16_t raw00 = ads03.readADC(j);
+  
+            float volt = ads03.toVoltage(raw00);
 
-          //float volt = ads[i].toVoltage(raw00);
+            record.concat(String(volt, 4));
+          record.concat(",");
+            }
 
-          //          Serial.print(volt); Serial.print(",");
-          //record.concat(String(volt, 3));
-          //record.concat(",");
+          else if ( i == 3){
+            int16_t raw00 = ads04.readADC(j);
+  
+            float volt = ads04.toVoltage(raw00);
+
+            record.concat(String(volt, 4));
+          record.concat(",");
+            }
         }
       }
       //      Serial.println("");
@@ -1605,17 +1633,8 @@ void loop() {
       
       record.concat(readLoadCell());
       scale.tare(); // reset the scale to 0
-      /*record.concat("\n");
-      
 
-      appendFile(SD, fileName.c_str(), record.c_str());
-
-      Serial.println(record);
-      dateTimeStr = "";
-      record = "";*/
-    }
-
-      
+    }   
 
     if (testCount > config03.numPos) {
       
@@ -1625,8 +1644,6 @@ void loop() {
     }
     
     
-
-
       } 
     }
 
@@ -1638,12 +1655,7 @@ void loop() {
         loopCount = 0;
   }
 
-
-
 }
-
-
-
 
 //Utilities
 //
