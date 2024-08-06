@@ -1,5 +1,3 @@
-
-
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <ESPUI.h>
@@ -40,11 +38,19 @@ AccelStepper stepperZ(AccelStepper::FULL2WIRE, 14, 27);     //Axis Z
 
 //UI handles
 uint16_t wifi_ssid_text, wifi_pass_text;
-uint16_t resultLabel, mainLabel, grouplabel, grouplabel2, mainSwitcher, mainSlider, mainText, settingZNumber, resultButton, mainTime, downloadButton, selectDownload;
+uint16_t resultLabel, mainLabel, grouplabel, grouplabel2, mainSwitcher, mainSlider, mainText, settingZNumber, resultButton, mainTime, downloadButton, selectDownload, SDcardRead, ADS01Status, ADS02Status, ADS03Status, ADS04Status, patternStatus, logStatus;
 uint16_t styleButton, styleLabel, styleSwitcher, styleSlider, styleButton2, styleLabel2, styleSlider2;
 uint16_t nameText, loopText, posText, moveText, saveConfigButton;
 uint16_t graph;
 volatile bool updates = false;
+
+//UI Var
+String cardStatus = "Initialize SD card";
+String ADS01 = "Initialized ADS1115 (0x48)";
+String ADS02 = "Initializee ADS1115 (0x49)";
+String ADS03 = "Initialized ADS1115 (0x4A)";
+String ADS04 = "Initialized ADS1115 (0x4B)";
+String dataLog = "File is ready";
 
 String fileNameResult = "";
 
@@ -464,11 +470,15 @@ void appendFile(fs::FS &fs, const char *path, const char *message)
   }
   if (file.print(message))
   {
-    //  Serial.println("Message appended");
+    dataLog = "Message appended";
+    ESPUI.updateLabel(logStatus, String(dataLog));
+    Serial.println(dataLog);
   }
   else
   {
-    Serial.println("Append failed");
+    dataLog = "Append failed";
+    ESPUI.updateLabel(logStatus, String(dataLog));
+    Serial.println(dataLog);
   }
   file.close();
 }
@@ -626,18 +636,20 @@ void setUpUI() {
     -----------------------------------------------------------------------------------------------------------*/
   auto maintab = ESPUI.addControl(Tab, "", "Test Plan");
 
+  //ESPUI.addControl(Separator, "Config Status", "", None, maintab);
+  //patternStatus = ESPUI.addControl(Label, "Pattern", String(Pattern), Sunflower, maintab);
+
   ESPUI.addControl(Separator, "General controls", "", None, maintab);
   mainLabel = ESPUI.addControl(Label, "Processing", String(loopCount), Emerald, maintab, generalCallback);
-
 
   //  mainSwitcher = ESPUI.addControl(Switcher, "Switcher", "", Sunflower, maintab, generalCallback);
   grouplabel = ESPUI.addControl(Label, "Start/Stop", "File name", Dark, maintab);
 
-  grouplabel2 = ESPUI.addControl(Label, "", "filename", Emerald, grouplabel);
+  grouplabel2 = ESPUI.addControl(Label, "", "fileName", Emerald, grouplabel);
 
   ESPUI.addControl(Switcher, "", "1", Sunflower, grouplabel, startButtonCallback);
   ESPUI.setElementStyle(grouplabel2, "font-size: x-large; font-family: serif;");
-
+ 
   auto resulttab = ESPUI.addControl(Tab, "", "Results");
 
   /*
@@ -654,7 +666,6 @@ void setUpUI() {
   selectDownload = ESPUI.addControl( ControlType::Select, "Select Title", "", Emerald, resultLabel );
 
   downloadButton = ESPUI.addControl(Button, "", "Download", Dark, resultLabel, downloadCallback);
-
 
   ESPUI.updateLabel(resultLabel, String(fileNameResult));
 
@@ -686,16 +697,17 @@ void setUpUI() {
   ESPUI.addControl(Min, "", "-50", None, settingZNumber);
   ESPUI.addControl(Max, "", "50", None, settingZNumber);
 
-  ESPUI.addControl(Separator, "Setting Config File", "", None, settingTab);
-
-  nameText = ESPUI.addControl(ControlType::Text, "Name", "", ControlColor::None, settingTab, setTextInputCallback);
-  loopText = ESPUI.addControl(ControlType::Text, "Loop", "", ControlColor::None, settingTab, setTextInputCallback);
-
+  ESPUI.addControl(Separator, "Pattern Config", "", None, settingTab);
   posText = ESPUI.addControl(Select, "Pattern", "", None, settingTab, setTextInputCallback);
+  ESPUI.addControl(Option, "Not Selected", "", None, posText, setTextInputCallback);
   ESPUI.addControl(Option, "3x3", "1", None, posText, setTextInputCallback);
   ESPUI.addControl(Option, "Center Point", "2", None, posText, setTextInputCallback);
   ESPUI.addControl(Option, "30x30", "3", None, posText, setTextInputCallback);
-  
+
+  ESPUI.addControl(Separator, "Setting Config File", "", None, settingTab);
+
+  nameText = ESPUI.addControl(ControlType::Text, "Name", "", ControlColor::None, settingTab, setTextInputCallback);
+  loopText = ESPUI.addControl(ControlType::Text, "Loop", "", ControlColor::None, settingTab, setTextInputCallback);  
   moveText = ESPUI.addControl(ControlType::Text, "Move", "", ControlColor::None, settingTab, setTextInputCallback);
 
   saveConfigButton = ESPUI.addControl(ControlType::Button, "Save Config", "Save", ControlColor::None, settingTab, configButtonCallback);
@@ -718,6 +730,14 @@ void setUpUI() {
   //Finally, start up the UI.
   //This should only be called once we are connected to WiFi.
   ESPUI.begin(HOSTNAME);
+
+  auto eventTab = ESPUI.addControl(Tab, "", "Event Log");
+  SDcardRead = ESPUI.addControl(Label, "SD Card Status", String(cardStatus), Alizarin, eventTab, generalCallback);
+  ADS01Status = ESPUI.addControl(Label, "ADS (0x48) Status", String(ADS01), Alizarin, eventTab, generalCallback);
+  ADS02Status = ESPUI.addControl(Label, "ADS (0x49) Status", String(ADS02), Alizarin, eventTab, generalCallback);
+  ADS03Status = ESPUI.addControl(Label, "ADS (0x4A) Status", String(ADS03), Alizarin, eventTab, generalCallback);
+  ADS04Status = ESPUI.addControl(Label, "ADS (0x4B) Status", String(ADS04), Alizarin, eventTab, generalCallback);
+  logStatus = ESPUI.addControl(Label, "Record Status", String(dataLog), Alizarin, eventTab, generalCallback);
 
 }
 
@@ -986,6 +1006,52 @@ void Task3code(void *pvParameters)
   }
 }
 
+bool initializeSensors() {
+  
+  bool success = true; 
+
+   ads01.setGain(3); // 4x gain   +/- 1._024V  1 bit = 0.5mV    0.03125mV
+  ads01.setDataRate(4);
+  if (!ads01.begin()) {
+    ADS01 = "Failed to initialize ADS1115 (0x48)!";
+    ESPUI.updateLabel(ADS01Status, String(ADS01));
+    Serial.println(ADS01);
+    success = false;
+    while(1);
+  }
+  
+  ads02.setGain(3); // 4x gain   +/- 1._024V  1 bit = 0.5mV    0.03125mV
+  ads02.setDataRate(4);
+  if (!ads02.begin()) {
+    ADS02 = "Failed to initialize ADS1115 (0x49)!";
+    ESPUI.updateLabel(ADS02Status, String(ADS02));
+    Serial.println(ADS02);
+    success = false;
+    while(1);
+  }
+
+   ads03.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
+  ads03.setDataRate(4);
+  if (!ads03.begin()) {
+    ADS03 = "Failed to initialize ADS1115 (0x4A)!";
+    ESPUI.updateLabel(ADS03Status, String(ADS03));
+    Serial.println(ADS03);
+    success = false;
+    while(1);
+  }
+
+  ads04.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
+  ads04.setDataRate(4);
+  if (!ads04.begin()) {
+    ADS04 = "Failed to initialize ADS1115 (0x4B)!";
+    ESPUI.updateLabel(ADS04Status, String(ADS04));
+    Serial.println(ADS04);
+    success = false;
+    while(1);
+  }
+  return success;
+}
+
 
 void setup() {
 
@@ -1041,7 +1107,9 @@ void setup() {
 
   if (!SD.begin())
   {
-    Serial.println("Card Mount Failed");
+    cardStatus = "Card Mount Failed";
+    ESPUI.updateLabel(SDcardRead, String(cardStatus));
+    Serial.println(cardStatus);
     return;
   }
   uint8_t cardType = SD.cardType();
@@ -1073,21 +1141,7 @@ void setup() {
   uint64_t cardSize = SD.cardSize() / (1024 * 1024);
   Serial.printf("SD Card Size: %lluMB\n", cardSize);
 
-  ads01.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
-  ads01.setDataRate(4);
-  if(!ads01.begin()) Serial.println("Not found ads01");
-  
-  ads02.setGain(3); // 4x gain   +/- 1._024V  1 bit = 0.5mV    0.03125mV
-  ads02.setDataRate(4);
-  if(!ads02.begin()) Serial.println("Not found ads02");
-
-  ads03.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
-  ads03.setDataRate(4);
-  if(!ads03.begin()) Serial.println("Not found ads03");
-
-  ads04.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
-  ads04.setDataRate(4);
-  if(!ads04.begin()) Serial.println("Not found ads04");
+  initializeSensors();
 
   diff = millis();
 
@@ -1204,6 +1258,11 @@ void loop() {
     ESPUI.updateSwitcher(mainSwitcher, ESPUI.getControl(mainSwitcher)->value.toInt() ? false : true);
 
     lastTime = millis();
+    if (!initializeSensors()) {
+      Serial.println("Reinitializing sensors failed.");
+    } else {
+      Serial.println("Sensors reinitialized.");
+    }
   }
 
   //Simple   UART interface
@@ -1650,6 +1709,7 @@ void loop() {
 
     loopCount++;
     ESPUI.updateLabel(mainLabel, String(loopCount));
+    ESPUI.updateLabel(grouplabel2, String(fileName));
 
   } else {
     isStopStart = false;
