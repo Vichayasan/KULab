@@ -110,6 +110,7 @@ long timezone = 7;
 byte daysavetime = 0;
 int testCount = 1;
 int loopCount = 1;
+int lineCount = 1;
 
 unsigned long diffMillis = 0;
 unsigned long diff = 0;
@@ -1596,26 +1597,30 @@ void loop() {
     Control* pos_ = ESPUI.getControl(posText);
 
 //Start of 20x20 mm. or 3x3 pattern    
-    if (pos_->value.equals("1")){  
-
+    if (pos_->value.equals("1")){ 
+      //testCount > config01.numPos loopCount
+      
     for ( int x = 0; x < config01.numPos; x++) {
-
+      /*Serial.println("testcount:" + String(testCount));
+      Serial.println("config01.numPos:" + String(config01.numPos));
+      Serial.println("loopCount:" + String(loopCount));*/
+      lineCount = 1;
       int _value = 0;
-      //      Serial.print("x:");
-      //      Serial.print(config01.pos[x][0]);
+            Serial.print("x:");
+            Serial.println(config01.pos[x][0]);
       stepperX.moveTo(config01.pos[x][0]);
       stepperX.runToPosition();
       stepperX.setCurrentPosition(0);
 
 
-      //      Serial.print("y:");
-      //      Serial.print(config01.pos[x][1]);
+            Serial.print("y:");
+            Serial.println(config01.pos[x][1]);
       stepperY.moveTo(config01.pos[x][1]);
       stepperY.runToPosition();
       stepperY.setCurrentPosition(0);
       //      Serial.println("");
 
-      int depthPress = abs(config01.pos[0][2]);
+      //int depthPress = abs(config01.pos[0][2]);
 
       //      Serial.println("press...");
 
@@ -1660,9 +1665,10 @@ void loop() {
       record.concat(",");
       record.concat(testCount);
       record.concat(",");
+      record.concat(lineCount);
+      record.concat(",");
       record.concat(" ");
-      testCount++;
-
+      lineCount++; 
       
       // Read all ADS1115 channels
       int16_t raw10 = ads01.readADC(0);
@@ -1777,7 +1783,11 @@ void loop() {
       record.concat(",");
       record.concat(testCount);
       record.concat(",");
+      record.concat(lineCount);
+      record.concat(",");
       record.concat(" ");
+      testCount++;
+      lineCount++;
       
       int16_t raw10 = ads01.readADC(0);
             float volt10 = ads01.toVoltage(raw10);
@@ -2189,7 +2199,7 @@ void loop() {
       record.concat(testCount);
       record.concat(",");
       record.concat(" ");
-      testCount++;
+      
 
   //Start reading ADC    
       int16_t raw10 = ads01.readADC(0);
@@ -2303,6 +2313,7 @@ void loop() {
       record.concat(testCount);
       record.concat(",");
       record.concat(" ");
+      testCount++;
       
       int16_t raw10 = ads01.readADC(0);
             float volt10 = ads01.toVoltage(raw10);
