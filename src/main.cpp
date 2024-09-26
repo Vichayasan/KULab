@@ -29,6 +29,20 @@ AccelStepper stepperZ(AccelStepper::FULL2WIRE, 14, 27);     //Axis Z
 #include <ESP32Time.h>
 #include "HX711.h"
 
+//Config function module before calling for using in VS code IDE
+void generalCallback(Control *sender, int type);
+void startButtonCallback(Control *sender, int type);
+void loadResultCallback(Control *sender, int type);
+void downloadCallback(Control *sender, int type);
+void moveAxisXY(Control *sender, int type);
+void posButtonCallback(Control *sender, int type);
+void setTextInputCallback(Control *sender, int type);
+void configButtonCallback(Control *sender, int type);
+void enterWifiDetailsCallback(Control * sender, int type);
+void connectWifi();
+void readStringFromEEPROM(String & buf, int baseaddress, int size);
+
+
 //Settings
 #define SLOW_BOOT 0
 #define HOSTNAME "KU.Physics.LAB"
@@ -39,18 +53,15 @@ AccelStepper stepperZ(AccelStepper::FULL2WIRE, 14, 27);     //Axis Z
 
 //UI handles
 uint16_t wifi_ssid_text, wifi_pass_text;
-uint16_t resultLabel, mainLabel, grouplabel, grouplabel2, mainSwitcher, mainSlider, mainText, settingZNumber, resultButton, mainTime, downloadButton, selectDownload, SDcardRead, ADS01Status, ADS02Status, ADS03Status, ADS04Status, patternStatus, logStatus;
+uint16_t resultLabel, mainLabel, grouplabel, grouplabel2, mainSwitcher, mainSlider, mainText, settingZNumber, resultButton, mainTime, downloadButton, selectDownload, SDcardRead, ADSStatus, patternStatus, logStatus;
 uint16_t styleButton, styleLabel, styleSwitcher, styleSlider, styleButton2, styleLabel2, styleSlider2;
-uint16_t nameText, loopText, posText, moveText, saveConfigButton;
+uint16_t nameText, loopText, posText, moveText, saveConfigButton, depthText, intervalPress;
 uint16_t graph;
 volatile bool updates = false;
 
 //UI Variables for status
 String cardStatus = "Initialize SD card";
-String ADS01 = "Initialized ADS1115 (0x48)";
-String ADS02 = "Initializee ADS1115 (0x49)";
-String ADS03 = "Initialized ADS1115 (0x4A)";
-String ADS04 = "Initialized ADS1115 (0x4B)";
+String ADS = "Initialized ADS1115";
 String dataLog = "File is ready";
 
 String fileNameResult = "";
@@ -72,22 +83,34 @@ ADS1115 ads01(0x48);
 ADS1115 ads02(0x49);
 ADS1115 ads03(0x4A);
 ADS1115 ads04(0x4B);
+int16_t raw10;
+int16_t raw20;
+int16_t raw30;
+int16_t raw40;
+float volt10;
+float volt20;
+float volt30;
+float volt40;
+
+//Constant Value for calculation
+float R1 = 100000; // constant R1 = 100 kOhm
+float R2 = 100000; // constant R2 = 100 kOhm
+
+float I;
+float amp10;
+float amp20;
+float amp30;
+float amp40;
+float Res10;
+float Res20;
+float Res30;
+float Res40;
+float loadCellReading;
+float readloadcell;
+float g = 9.81;
 
 File myFile;
 ESP32Time rtc;
-
-//Config function module before calling for using in VS code IDE
-void generalCallback(Control *sender, int type);
-void startButtonCallback(Control *sender, int type);
-void loadResultCallback(Control *sender, int type);
-void downloadCallback(Control *sender, int type);
-void moveAxisXY(Control *sender, int type);
-void posButtonCallback(Control *sender, int type);
-void setTextInputCallback(Control *sender, int type);
-void configButtonCallback(Control *sender, int type);
-void enterWifiDetailsCallback(Control * sender, int type);
-void randomString(char *buf, int len);
-void connectWifi();
 
 String yearStr = "";
 String monthStr = "";
@@ -118,6 +141,8 @@ const int limit = 1000;
 int axisX = 1;
 int axisY = 1;
 int axisZ = 1;
+int depth = 40;
+int interval = 30;
 
 int x = 0;
 int y = 0;
@@ -343,7 +368,7 @@ bool readConfig(const String &filename, Config01 &config01, Config02 &config02, 
 }
 
 // Function to clean up dynamically allocated memory
-void cleanUp(Config01 &config01, Config02 &config02, Config03 &config03) {
+/*void cleanUp(Config01 &config01, Config02 &config02, Config03 &config03) {
     if (config01.pos) {
         for (int i = 0; i < 9; ++i) {
             delete[] config01.pos[i];
@@ -362,7 +387,7 @@ void cleanUp(Config01 &config01, Config02 &config02, Config03 &config03) {
         }
         delete[] config03.pos;
     }
-}
+}*/
 
 /**
  * @brief Lists the contents of a directory and its subdirectories.
@@ -928,20 +953,23 @@ void setUpUI() {
   ESPUI.addControl(Min, "", "-50", None, settingZNumber);
   ESPUI.addControl(Max, "", "50", None, settingZNumber);
 
-  ESPUI.addControl(Separator, "Pattern Config", "", None, settingTab);
+  ESPUI.addControl(Separator, "Setting Configuration Pattern", "", None, settingTab);
   posText = ESPUI.addControl(Select, "Pattern", "", None, settingTab, setTextInputCallback);
   ESPUI.addControl(Option, "Not Selected", "", None, posText, setTextInputCallback);
   ESPUI.addControl(Option, "3x3", "1", None, posText, setTextInputCallback);
   ESPUI.addControl(Option, "Center Point", "2", None, posText, setTextInputCallback);
   ESPUI.addControl(Option, "30x30", "3", None, posText, setTextInputCallback);
+  loopText = ESPUI.addControl(ControlType::Number, "Loop", "", ControlColor::None, settingTab, setTextInputCallback);
+  depthText = ESPUI.addControl(ControlType::Number, "Depth press (mm X 0.1)", String(depth), ControlColor::None, settingTab, setTextInputCallback);
+  intervalPress = ESPUI.addControl(ControlType::Number, "The interval between presses (Assume the time interval is one second)", String(interval), ControlColor::None, settingTab, setTextInputCallback);
 
-  ESPUI.addControl(Separator, "Setting Config File", "", None, settingTab);
+  //  ESPUI.addControl(Separator, "Setting Config File", "", None, settingTab);
 
-  nameText = ESPUI.addControl(ControlType::Text, "Name", "", ControlColor::None, settingTab, setTextInputCallback);
-  loopText = ESPUI.addControl(ControlType::Text, "Loop", "", ControlColor::None, settingTab, setTextInputCallback);  
-  moveText = ESPUI.addControl(ControlType::Text, "Move", "", ControlColor::None, settingTab, setTextInputCallback);
+  //  nameText = ESPUI.addControl(ControlType::Text, "Name", "", ControlColor::None, settingTab, setTextInputCallback);
+  //  loopText = ESPUI.addControl(ControlType::Text, "Loop", "", ControlColor::None, settingTab, setTextInputCallback);  
+  //  moveText = ESPUI.addControl(ControlType::Text, "Move", "", ControlColor::None, settingTab, setTextInputCallback);
 
-  saveConfigButton = ESPUI.addControl(ControlType::Button, "Save Config", "Save", ControlColor::None, settingTab, configButtonCallback);
+  //  saveConfigButton = ESPUI.addControl(ControlType::Button, "Save Config", "Save", ControlColor::None, settingTab, configButtonCallback);
 
   /*
      Tab: WiFi Credentials
@@ -964,10 +992,8 @@ void setUpUI() {
 
   auto eventTab = ESPUI.addControl(Tab, "", "Event Log");
   SDcardRead = ESPUI.addControl(Label, "SD Card Status", String(cardStatus), Alizarin, eventTab, generalCallback);
-  ADS01Status = ESPUI.addControl(Label, "ADS (0x48) Status", String(ADS01), Alizarin, eventTab, generalCallback);
-  ADS02Status = ESPUI.addControl(Label, "ADS (0x49) Status", String(ADS02), Alizarin, eventTab, generalCallback);
-  ADS03Status = ESPUI.addControl(Label, "ADS (0x4A) Status", String(ADS03), Alizarin, eventTab, generalCallback);
-  ADS04Status = ESPUI.addControl(Label, "ADS (0x4B) Status", String(ADS04), Alizarin, eventTab, generalCallback);
+  ADSStatus = ESPUI.addControl(Label, "ADS Status", String(ADS), Alizarin, eventTab, generalCallback);
+
   logStatus = ESPUI.addControl(Label, "Record Status", String(dataLog), Alizarin, eventTab, generalCallback);
 
 }
@@ -982,8 +1008,8 @@ void setTextInputCallback(Control *sender, int type) {
   
 }
 
-void configButtonCallback(Control *sender, int type) {
-  /*String file = "";
+/*void configButtonCallback(Control *sender, int type) {
+  String file = "";
   if (type == B_UP) {
     Control* name_ = ESPUI.getControl(nameText);
     //  ESPUI.updateControl(nameText);
@@ -1007,8 +1033,8 @@ void configButtonCallback(Control *sender, int type) {
     config.name = name_->value;
     config.loop = loop_->value.toInt();
     config.numPos = pos_->value.toInt();
-  }*/
-}
+  }
+}*/
 
 void styleCallback(Control *sender, int type) {
   //Declare space for style strings. These have to be static so that they are always available
@@ -1032,28 +1058,6 @@ void styleCallback(Control *sender, int type) {
   }
 }
 
-
-//This callback updates the "values" of a bunch of controls
-void scrambleCallback(Control *sender, int type) {
-  static char rndString1[10];
-  static char rndString2[20];
-  static bool scText = false;
-
-  if (type == B_UP) { //Button callbacks generate events for both UP and DOWN.
-    //Generate some random text
-    randomString(rndString1, 10);
-    randomString(rndString2, 20);
-
-    //Set the various controls to random value to show how controls can be updated at runtime
-
-    ESPUI.updateSwitcher(mainSwitcher, ESPUI.getControl(mainSwitcher)->value.toInt() ? false : true);
-    ESPUI.updateSlider(mainSlider, random(10, 400));
-    ESPUI.updateText(mainText, String(rndString2));
-    ESPUI.updateNumber(settingZNumber, random(100000));
-    ESPUI.updateButton(resultButton, scText ? "Scrambled!" : "Scrambled.");
-    scText = !scText;
-  }
-}
 
 void updateCallback(Control *sender, int type) {
   updates = (sender->value.toInt() > 0);
@@ -1220,19 +1224,20 @@ void extendedCallback(Control* sender, int type, void* param)
 }
 
 // Task1code: blinks an LED every 1000 ms
-/*void Task1code(void *pvParameters)
+void Task1code(void *pvParameters)
 {
 
   for (;;)
   {
     //    Serial.print("Task1 running on core ");
     //    Serial.println(xPortGetCoreID());
-    //    heartBeat();
+        heartBeat();
     vTaskDelay((2000) / portTICK_PERIOD_MS);
   }
 }
 
 // Task2code: blinks an LED every 700 ms
+/*
 void Task2code(void *pvParameters)
 {
   // Serial.print("Task2 running on core ");
@@ -1277,43 +1282,23 @@ bool initializeSensors() {
   // Initialize ADS1115 (0x48)
   ads01.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
   ads01.setDataRate(4);
-  if (!ads01.begin()) {
-    ADS01 = "Failed to initialize ADS1115 (0x48)!";
-    ESPUI.updateLabel(ADS01Status, String(ADS01));
-    Serial.println(ADS01);
-    success = false;
-    while(1);
-  }
-  
+
   // Initialize ADS1115 (0x49)
   ads02.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
   ads02.setDataRate(4);
-  if (!ads02.begin()) {
-    ADS02 = "Failed to initialize ADS1115 (0x49)!";
-    ESPUI.updateLabel(ADS02Status, String(ADS02));
-    Serial.println(ADS02);
-    success = false;
-    while(1);
-  }
 
   // Initialize ADS1115 (0x4A)
   ads03.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
   ads03.setDataRate(4);
-  if (!ads03.begin()) {
-    ADS03 = "Failed to initialize ADS1115 (0x4A)!";
-    ESPUI.updateLabel(ADS03Status, String(ADS03));
-    Serial.println(ADS03);
-    success = false;
-    while(1);
-  }
 
   // Initialize ADS1115 (0x4B)
   ads04.setGain(3); // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
   ads04.setDataRate(4);
-  if (!ads04.begin()) {
-    ADS04 = "Failed to initialize ADS1115 (0x4B)!";
-    ESPUI.updateLabel(ADS04Status, String(ADS04));
-    Serial.println(ADS04);
+
+  if (!ads01.begin() || !ads02.begin() || !ads03.begin() || !ads04.begin()) {
+    ADS = "Failed to initialize ADS1115!";
+    ESPUI.updateLabel(ADSStatus, String(ADS));
+    Serial.println(ADS);
     success = false;
     while(1);
   }
@@ -1322,6 +1307,218 @@ bool initializeSensors() {
 
 }
 
+
+/**
+ * @brief Move the steppers to the starting position based on the position selected by the user
+ *
+ * This function moves the steppers to the starting position based on the position selected by the user
+ * in the UI. The position can be either 1, 2, or 3, which correspond to the following positions:
+ * - Position 1: -1000, -1000
+ * - Position 2: 0, 0
+ * - Position 3: -1000, -1000 (300x300 mm)
+ */
+void moveToStart() {
+  // Get the position selected by the user from the UI
+  //  Serial.println("move2start");
+  
+  Control* pos_ = ESPUI.getControl(posText);
+
+  if (pos_->value.equals("1")){ //20x20 mm. or 3x3 pattern
+    stepperX.moveTo(-1000);
+    stepperX.runToPosition();
+    stepperX.setCurrentPosition(0);
+
+    stepperY.moveTo(-1000);
+    stepperY.runToPosition();
+    stepperY.setCurrentPosition(0);
+  }
+    // Move the steppers to the starting position
+  else if (pos_->value.equals("2")){ //1x1
+    stepperX.moveTo(0);
+    stepperX.runToPosition();
+    stepperX.setCurrentPosition(0);
+
+    stepperY.moveTo(0);
+    stepperY.runToPosition();
+    stepperY.setCurrentPosition(0);
+  }
+    
+    // Move the steppers to the starting position
+  else if (pos_->value.equals("3")){ //300x300 mm. or 30x30 pattern
+
+    for (int x = 0; x < 15; x++){
+      stepperX.moveTo(-1000);
+      stepperX.runToPosition();
+      stepperX.setCurrentPosition(0);
+    }
+
+    for (int x = 0; x < 15; x++){
+      stepperY.moveTo(-1000);
+      stepperY.runToPosition();
+      stepperY.setCurrentPosition(0);
+    }
+  }
+
+}
+
+float I0(float value){
+  
+  I = ((5 - value) / R1)  * 1000;
+  return I;
+  }
+
+float R0(float value){
+  float R0 = ((R2 * value) / (((I * 0.001) * R2 ) - value ))  * 0.000001;
+  return R0;
+  }
+
+//Utilities
+//
+//If you are here just to see examples of how to use ESPUI, you can ignore the following functions
+//------------------------------------------------------------------------------------------------
+void readStringFromEEPROM(String & buf, int baseaddress, int size) {
+  buf.reserve(size);
+  for (int i = baseaddress; i < baseaddress + size; i++) {
+    char c = EEPROM.read(i);
+    buf += c;
+    if (!c) break;
+  }
+}
+
+void connectWifi() {
+  int connect_timeout;
+
+#if defined(ESP32)
+  WiFi.setHostname(HOSTNAME);
+#else
+  WiFi.hostname(HOSTNAME);
+#endif
+  //  Serial.println("Begin wifi...");
+
+  //Load credentials from EEPROM
+  if (!(FORCE_USE_HOTSPOT)) {
+    yield();
+    EEPROM.begin(100);
+    String stored_ssid, stored_pass;
+    readStringFromEEPROM(stored_ssid, 0, 32);
+    readStringFromEEPROM(stored_pass, 32, 96);
+    EEPROM.end();
+
+    //Try to connect with stored credentials, fire up an access point if they don't work.
+#if defined(ESP32)
+    WiFi.begin(stored_ssid.c_str(), stored_pass.c_str());
+#else
+    WiFi.begin(stored_ssid, stored_pass);
+#endif
+    connect_timeout = 28; //7 seconds
+    while (WiFi.status() != WL_CONNECTED && connect_timeout > 0) {
+      delay(250);
+      Serial.print(".");
+      connect_timeout--;
+    }
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println(WiFi.localIP());
+    Serial.println("Wifi started");
+
+    if (!MDNS.begin(HOSTNAME)) {
+      Serial.println("Error setting up MDNS responder!");
+    }
+  } else {
+    Serial.println("\nCreating access point...");
+    WiFi.mode(WIFI_AP);
+    WiFi.softAPConfig(IPAddress(192, 168, 1, 1), IPAddress(192, 168, 1, 1), IPAddress(255, 255, 255, 0));
+    WiFi.softAP(HOSTNAME);
+
+    connect_timeout = 20;
+    do {
+      delay(250);
+      Serial.print(",");
+      connect_timeout--;
+    } while (connect_timeout);
+  }
+}
+
+void enterWifiDetailsCallback(Control * sender, int type) {
+  if (type == B_UP) {
+    Serial.println("Saving credentials to EPROM...");
+    Serial.println(ESPUI.getControl(wifi_ssid_text)->value);
+    Serial.println(ESPUI.getControl(wifi_pass_text)->value);
+    unsigned int i;
+    EEPROM.begin(100);
+    for (i = 0; i < ESPUI.getControl(wifi_ssid_text)->value.length(); i++) {
+      EEPROM.write(i, ESPUI.getControl(wifi_ssid_text)->value.charAt(i));
+      if (i == 30) break; //Even though we provided a max length, user input should never be trusted
+    }
+    EEPROM.write(i, '\0');
+
+    for (i = 0; i < ESPUI.getControl(wifi_pass_text)->value.length(); i++) {
+      EEPROM.write(i + 32, ESPUI.getControl(wifi_pass_text)->value.charAt(i));
+      if (i == 94) break; //Even though we provided a max length, user input should never be trusted
+    }
+    EEPROM.write(i + 32, '\0');
+    EEPROM.end();
+  }
+}  
+
+void readADS(){
+   for (int i = 0; i < 3; i++){ 
+          raw10 = ads01.readADC(i);
+          volt10 = ads01.toVoltage(raw10);
+          amp10 = I0(volt10);
+          Res10 = R0(volt10);
+          record.concat(String(volt10, 4));
+          record.concat(",");
+          record.concat(String(amp10, 4));
+          record.concat(",");
+          record.concat(String(Res10, 4));
+          record.concat(",");
+          record.concat(" ");
+     }
+
+      for (int i = 0; i < 3; i++){
+          raw20 = ads02.readADC(i);
+          volt20 = ads02.toVoltage(raw20);
+          amp20 = I0(volt20);
+          Res20 = R0(volt20);
+          record.concat(String(volt20, 4));
+          record.concat(",");
+          record.concat(String(amp20, 4));
+          record.concat(",");
+          record.concat(String(Res20, 4));
+          record.concat(",");
+          record.concat(" ");
+      }
+
+      for (int i = 0; i < 3; i++){
+            raw30 = ads03.readADC(i);
+            volt30 = ads03.toVoltage(raw30);
+            amp30 = I0(volt30);
+            Res30 = R0(volt30);
+            record.concat(String(volt30, 4));
+            record.concat(",");
+            record.concat(String(amp30, 4));
+            record.concat(",");
+            record.concat(String(Res30, 4));
+            record.concat(",");
+            record.concat(" ");
+      }
+
+      for (int i = 0; i < 3; i++){
+            raw40 = ads04.readADC(i);
+            volt40 = ads04.toVoltage(raw40);
+            amp40 = I0(volt40);
+            Res40 = R0(volt40);
+            record.concat(String(volt40, 4));
+            record.concat(",");
+            record.concat(String(amp40, 4));
+            record.concat(",");
+            record.concat(String(Res40, 4));
+            record.concat(",");
+            record.concat(" ");
+      }
+}
 
 void setup() {
 
@@ -1484,59 +1681,6 @@ void setup() {
 
 }
 
-/**
- * @brief Move the steppers to the starting position based on the position selected by the user
- *
- * This function moves the steppers to the starting position based on the position selected by the user
- * in the UI. The position can be either 1, 2, or 3, which correspond to the following positions:
- * - Position 1: -1000, -1000
- * - Position 2: 0, 0
- * - Position 3: -1000, -1000 (300x300 mm)
- */
-void moveToStart() {
-  // Get the position selected by the user from the UI
-  //  Serial.println("move2start");
-  
-  Control* pos_ = ESPUI.getControl(posText);
-
-  if (pos_->value.equals("1")){ //20x20 mm. or 3x3 pattern
-    stepperX.moveTo(-1000);
-    stepperX.runToPosition();
-    stepperX.setCurrentPosition(0);
-
-    stepperY.moveTo(-1000);
-    stepperY.runToPosition();
-    stepperY.setCurrentPosition(0);
-  }
-    // Move the steppers to the starting position
-  else if (pos_->value.equals("2")){ //1x1
-    stepperX.moveTo(0);
-    stepperX.runToPosition();
-    stepperX.setCurrentPosition(0);
-
-    stepperY.moveTo(0);
-    stepperY.runToPosition();
-    stepperY.setCurrentPosition(0);
-  }
-    
-    // Move the steppers to the starting position
-  else if (pos_->value.equals("3")){ //300x300 mm. or 30x30 pattern
-
-    for (int x = 0; x < 15; x++){
-      stepperX.moveTo(-1000);
-      stepperX.runToPosition();
-      stepperX.setCurrentPosition(0);
-    }
-
-    for (int x = 0; x < 15; x++){
-      stepperY.moveTo(-1000);
-      stepperY.runToPosition();
-      stepperY.setCurrentPosition(0);
-    }
-  }
-
-}
-
 void loop() {
   static long unsigned lastTime = 0;
 
@@ -1549,15 +1693,7 @@ void loop() {
 
     lastTime = millis();
 
-    // Try to reinitialize the sensors if the main switcher is turned on
-    if (ESPUI.getControl(mainSwitcher)->value.toInt() && !initializeSensors()) {
-    if (!initializeSensors()) {
-      Serial.println("Reinitializing sensors failed.");
-    } else {
-      Serial.println("Sensors reinitialized.");
     }
-
-  }}
 
   //Simple   UART interface
   if (Serial.available()) {
@@ -1581,9 +1717,15 @@ void loop() {
   //We don't need to call this explicitly on ESP32 but we do on 8266
   MDNS.update();
 #endif
+  Control* loop_  = ESPUI.getControl(loopText);
+  Control* pos_   = ESPUI.getControl(posText);
+  Control* depth_ = ESPUI.getControl(depthText);
+  Control* interval_ = ESPUI.getControl(intervalPress);
+  depth = -(depth_->value.toInt()) * 10;
+  interval = interval_->value.toInt();
 
 //Start of main loop
-  if (isStopStart && (loopCount <= 100) ) {
+  if (isStopStart && (loopCount <= loop_->value.toInt() )) {
         //Serial.print("loopCount: ");
         //Serial.println(loopCount);
         //Serial.print("Loop: ");
@@ -1593,10 +1735,6 @@ void loop() {
     yearStr = String(tmstruct.tm_year + 1900, DEC);
     // tmstruct.tm_mon is months since January, so we add 1 to get a 1-based month
     monthStr = String(tmstruct.tm_mon + 1, DEC);
-
-    Control* pos_ = ESPUI.getControl(posText);
-
-//Start of 20x20 mm. or 3x3 pattern    
     if (pos_->value.equals("1")){ 
       //testCount > config01.numPos loopCount
       
@@ -1626,12 +1764,12 @@ void loop() {
 
       //  Serial.println(depthPress);
   //Start pressing material
-      stepperZ.moveTo(-400);
+      stepperZ.moveTo(depth);
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
 
   //Start recording data 
-      for (int z = 0; z < 4; z++){
+      for (int z = 0; z < interval; z++){
         
       getLocalTime(&tmstruct, 5000);
           dayStr = String(tmstruct.tm_mday, DEC);
@@ -1671,82 +1809,29 @@ void loop() {
       lineCount++; 
       
       // Read all ADS1115 channels
-      int16_t raw10 = ads01.readADC(0);
-      float volt10 = ads01.toVoltage(raw10);
-      record.concat(String(volt10, 4)); // 4 decimal places
-      record.concat(","); // separator
-
-      int16_t raw11 = ads01.readADC(1);
-      float volt11 = ads01.toVoltage(raw11);
-      record.concat(String(volt11, 4));
-      record.concat(",");
-
-      int16_t raw12 = ads01.readADC(2);
-      float volt12 = ads01.toVoltage(raw12);
-      record.concat(String(volt12, 4));
-      record.concat(",");
-
-      int16_t raw20 = ads02.readADC(0);
-      float volt20 = ads02.toVoltage(raw20);
-      record.concat(String(volt20, 4));
-      record.concat(",");
-
-      int16_t raw21 = ads02.readADC(1);
-      float volt21 = ads02.toVoltage(raw21);
-      record.concat(String(volt21, 4));
-      record.concat(",");
-
-      int16_t raw22 = ads02.readADC(2);
-      float volt22 = ads02.toVoltage(raw22);
-      record.concat(String(volt22, 4));
-      record.concat(",");
-
-      int16_t raw30 = ads03.readADC(0);
-      float volt30 = ads03.toVoltage(raw30);
-      record.concat(String(volt30, 4));
-      record.concat(",");
-
-      int16_t raw31 = ads03.readADC(1);
-      float volt31 = ads03.toVoltage(raw31);
-      record.concat(String(volt31, 4));
-      record.concat(",");
-
-      int16_t raw32 = ads03.readADC(2);
-      float volt32 = ads03.toVoltage(raw32);
-      record.concat(String(volt32, 4));
-      record.concat(",");
-
-      int16_t raw40 = ads04.readADC(0);
-      float volt40 = ads04.toVoltage(raw40);
-      record.concat(String(volt40, 4));
-      record.concat(",");
-
-      int16_t raw41 = ads04.readADC(1);
-      float volt41 = ads04.toVoltage(raw41);
-      record.concat(String(volt41, 4));
-      record.concat(",");
-
-      int16_t raw42 = ads04.readADC(2);
-      float volt42 = ads04.toVoltage(raw42);
-      record.concat(String(volt42, 4));
-      record.concat(",");
+      readADS();
 
       // Read load cell
-      record.concat(readLoadCell());
+	  loadCellReading = readLoadCell();
+      readloadcell = loadCellReading * g * 0.001;
+      record.concat(String(loadCellReading));
+      record.concat(",");
+      record.concat(String(readloadcell));
       record.concat("\n");
       
       // Write record to SD card
       appendFile(SD, fileName.c_str(), record.c_str());
       Serial.println(record);
+      scale.tare(); // reset the scale to 0
       dateTimeStr = "";
       record = "";
-      delayMicroseconds(1000000);
+      delayMicroseconds(800000);
       }      
 
       record.concat("\n");
       
   //Stop pressing material
-      stepperZ.moveTo(400);
+      stepperZ.moveTo(abs(depth));
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
 
@@ -1789,68 +1874,15 @@ void loop() {
       testCount++;
       lineCount++;
       
-      int16_t raw10 = ads01.readADC(0);
-            float volt10 = ads01.toVoltage(raw10);
-            record.concat(String(volt10, 4));
-          record.concat(",");
-          
-          int16_t raw11 = ads01.readADC(1);
-            float volt11 = ads01.toVoltage(raw11);
-            record.concat(String(volt11, 4));
-          record.concat(",");
+      // Read all ADS1115 channels
+      readADS();
 
-          int16_t raw12 = ads01.readADC(2);
-            float volt12 = ads01.toVoltage(raw12);
-            record.concat(String(volt12, 4));
-          record.concat(",");
-
-
-            int16_t raw20 = ads02.readADC(0);
-            float volt20 = ads02.toVoltage(raw20);
-            record.concat(String(volt20, 4));
-          record.concat(",");
-
-          int16_t raw21 = ads02.readADC(1);
-            float volt21 = ads02.toVoltage(raw21);
-            record.concat(String(volt21, 4));
-          record.concat(",");
-
-          int16_t raw22 = ads02.readADC(2);
-            float volt22 = ads02.toVoltage(raw22);
-            record.concat(String(volt22, 4));
-          record.concat(",");
-
-            int16_t raw30 = ads03.readADC(0);
-            float volt30 = ads03.toVoltage(raw30);
-            record.concat(String(volt30, 4));
-          record.concat(",");
-
-          int16_t raw31 = ads03.readADC(1);
-            float volt31 = ads03.toVoltage(raw31);
-            record.concat(String(volt31, 4));
-          record.concat(",");
-
-          int16_t raw32 = ads03.readADC(2);
-            float volt32 = ads03.toVoltage(raw32);
-            record.concat(String(volt32, 4));
-          record.concat(",");
-
-            int16_t raw40 = ads04.readADC(0);
-            float volt40 = ads04.toVoltage(raw40);
-            record.concat(String(volt40, 4));
-          record.concat(",");
-
-          int16_t raw41 = ads04.readADC(1);
-            float volt41 = ads04.toVoltage(raw41);
-            record.concat(String(volt41, 4));
-          record.concat(",");
-
-          int16_t raw42 = ads04.readADC(2);
-            float volt42 = ads04.toVoltage(raw42);
-            record.concat(String(volt42, 4));
-          record.concat(",");
-
-      record.concat(readLoadCell());
+      // Read load cell
+	  loadCellReading = readLoadCell();
+      readloadcell = loadCellReading * g * 0.001;
+      record.concat(String(loadCellReading));
+      record.concat(",");
+      record.concat(String(readloadcell));
       record.concat("\n");
       
       appendFile(SD, fileName.c_str(), record.c_str());
@@ -1897,12 +1929,12 @@ void loop() {
       //      Serial.println("press...");
   //Start press material    
         Serial.println("depthPress");
-      stepperZ.moveTo(-400);
+      stepperZ.moveTo(depth);
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
 
-  //Start record data for 4 seconds
-      for (int z = 0; z < 4; z++){
+  //Start record data
+      for (int z = 0; z < interval; z++){
         
       getLocalTime(&tmstruct, 5000);
           dayStr = String(tmstruct.tm_mday, DEC);
@@ -1939,81 +1971,28 @@ void loop() {
       record.concat(" ");
       testCount++;
 
-  //Start read ADC    
-      int16_t raw10 = ads01.readADC(0);
-            float volt10 = ads01.toVoltage(raw10);
-            record.concat(String(volt10, 4));
-          record.concat(",");
-          
-          int16_t raw11 = ads01.readADC(1);
-            float volt11 = ads01.toVoltage(raw11);
-            record.concat(String(volt11, 4));
-          record.concat(",");
+  // Read all ADS1115 channels
+      readADS();
 
-          int16_t raw12 = ads01.readADC(2);
-            float volt12 = ads01.toVoltage(raw12);
-            record.concat(String(volt12, 4));
-          record.concat(",");
-
-            int16_t raw20 = ads02.readADC(0);
-            float volt20 = ads02.toVoltage(raw20);
-            record.concat(String(volt20, 4));
-          record.concat(",");
-
-          int16_t raw21 = ads02.readADC(1);
-            float volt21 = ads02.toVoltage(raw21);
-            record.concat(String(volt21, 4));
-          record.concat(",");
-
-          int16_t raw22 = ads02.readADC(2);
-            float volt22 = ads02.toVoltage(raw22);
-            record.concat(String(volt22, 4));
-          record.concat(",");
-
-            int16_t raw30 = ads03.readADC(0);
-            float volt30 = ads03.toVoltage(raw30);
-            record.concat(String(volt30, 4));
-          record.concat(",");
-
-          int16_t raw31 = ads03.readADC(1);
-            float volt31 = ads03.toVoltage(raw31);
-            record.concat(String(volt31, 4));
-          record.concat(",");
-
-          int16_t raw32 = ads03.readADC(2);
-            float volt32 = ads03.toVoltage(raw32);
-            record.concat(String(volt32, 4));
-          record.concat(",");
-
-            int16_t raw40 = ads04.readADC(0);
-            float volt40 = ads04.toVoltage(raw40);
-            record.concat(String(volt40, 4));
-          record.concat(",");
-
-          int16_t raw41 = ads04.readADC(1);
-            float volt41 = ads04.toVoltage(raw41);
-            record.concat(String(volt41, 4));
-          record.concat(",");
-
-          int16_t raw42 = ads04.readADC(2);
-            float volt42 = ads04.toVoltage(raw42);
-            record.concat(String(volt42, 4));
-          record.concat(",");
-
-      record.concat(readLoadCell());
+      // Read load cell
+	  loadCellReading = readLoadCell();
+      readloadcell = loadCellReading * g * 0.001;
+      record.concat(String(loadCellReading));
+      record.concat(",");
+      record.concat(String(readloadcell));
       record.concat("\n");
       
       appendFile(SD, fileName.c_str(), record.c_str());
       Serial.println(record);
       dateTimeStr = "";
       record = "";
-      delayMicroseconds(1000000);
-      }      
+      delayMicroseconds(800000);
+      }
   //end record data for 4 seconds
       record.concat("\n");
 
   //Stop press material    
-      stepperZ.moveTo(400);
+      stepperZ.moveTo(abs(depth));
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
 
@@ -2051,69 +2030,15 @@ void loop() {
       record.concat(testCount);
       record.concat(",");
       record.concat(" ");
-      
-      int16_t raw10 = ads01.readADC(0);
-            float volt10 = ads01.toVoltage(raw10);
-            record.concat(String(volt10, 4));
-          record.concat(",");
-          
-          int16_t raw11 = ads01.readADC(1);
-            float volt11 = ads01.toVoltage(raw11);
-            record.concat(String(volt11, 4));
-          record.concat(",");
+     // Read all ADS1115 channels
+      readADS();
 
-          int16_t raw12 = ads01.readADC(2);
-            float volt12 = ads01.toVoltage(raw12);
-            record.concat(String(volt12, 4));
-          record.concat(",");
-
-
-            int16_t raw20 = ads02.readADC(0);
-            float volt20 = ads02.toVoltage(raw20);
-            record.concat(String(volt20, 4));
-          record.concat(",");
-
-          int16_t raw21 = ads02.readADC(1);
-            float volt21 = ads02.toVoltage(raw21);
-            record.concat(String(volt21, 4));
-          record.concat(",");
-
-          int16_t raw22 = ads02.readADC(2);
-            float volt22 = ads02.toVoltage(raw22);
-            record.concat(String(volt22, 4));
-          record.concat(",");
-
-            int16_t raw30 = ads03.readADC(0);
-            float volt30 = ads03.toVoltage(raw30);
-            record.concat(String(volt30, 4));
-          record.concat(",");
-
-          int16_t raw31 = ads03.readADC(1);
-            float volt31 = ads03.toVoltage(raw31);
-            record.concat(String(volt31, 4));
-          record.concat(",");
-
-          int16_t raw32 = ads03.readADC(2);
-            float volt32 = ads03.toVoltage(raw32);
-            record.concat(String(volt32, 4));
-          record.concat(",");
-
-            int16_t raw40 = ads04.readADC(0);
-            float volt40 = ads04.toVoltage(raw40);
-            record.concat(String(volt40, 4));
-          record.concat(",");
-
-          int16_t raw41 = ads04.readADC(1);
-            float volt41 = ads04.toVoltage(raw41);
-            record.concat(String(volt41, 4));
-          record.concat(",");
-
-          int16_t raw42 = ads04.readADC(2);
-            float volt42 = ads04.toVoltage(raw42);
-            record.concat(String(volt42, 4));
-          record.concat(",");
-
-      record.concat(readLoadCell());
+     // Read load cell
+	  loadCellReading = readLoadCell();
+      readloadcell = loadCellReading * g * 0.001;
+      record.concat(String(loadCellReading));
+      record.concat(",");
+      record.concat(String(readloadcell));
       record.concat("\n");
       
       appendFile(SD, fileName.c_str(), record.c_str());
@@ -2162,9 +2087,12 @@ void loop() {
 
   //Start press material
       if (depthPress == 4){
+        stepperZ.moveTo(depth);
+        stepperZ.runToPosition();
+        stepperZ.setCurrentPosition(0);
 
   //Start record data for 4 seconds      
-        for (int z = 0; z < 4; z++){
+        for (int z = 0; z < interval; z++){
         
       getLocalTime(&tmstruct, 5000);
           dayStr = String(tmstruct.tm_mday, DEC);
@@ -2201,81 +2129,28 @@ void loop() {
       record.concat(" ");
       
 
-  //Start reading ADC    
-      int16_t raw10 = ads01.readADC(0);
-            float volt10 = ads01.toVoltage(raw10);
-            record.concat(String(volt10, 4));
-          record.concat(",");
-          
-          int16_t raw11 = ads01.readADC(1);
-            float volt11 = ads01.toVoltage(raw11);
-            record.concat(String(volt11, 4));
-          record.concat(",");
+  // Read all ADS1115 channels
+     readADS();
 
-          int16_t raw12 = ads01.readADC(2);
-            float volt12 = ads01.toVoltage(raw12);
-            record.concat(String(volt12, 4));
-          record.concat(",");
-
-            int16_t raw20 = ads02.readADC(0);
-            float volt20 = ads02.toVoltage(raw20);
-            record.concat(String(volt20, 4));
-          record.concat(",");
-
-          int16_t raw21 = ads02.readADC(1);
-            float volt21 = ads02.toVoltage(raw21);
-            record.concat(String(volt21, 4));
-          record.concat(",");
-
-          int16_t raw22 = ads02.readADC(2);
-            float volt22 = ads02.toVoltage(raw22);
-            record.concat(String(volt22, 4));
-          record.concat(",");
-
-            int16_t raw30 = ads03.readADC(0);
-            float volt30 = ads03.toVoltage(raw30);
-            record.concat(String(volt30, 4));
-          record.concat(",");
-
-          int16_t raw31 = ads03.readADC(1);
-            float volt31 = ads03.toVoltage(raw31);
-            record.concat(String(volt31, 4));
-          record.concat(",");
-
-          int16_t raw32 = ads03.readADC(2);
-            float volt32 = ads03.toVoltage(raw32);
-            record.concat(String(volt32, 4));
-          record.concat(",");
-
-            int16_t raw40 = ads04.readADC(0);
-            float volt40 = ads04.toVoltage(raw40);
-            record.concat(String(volt40, 4));
-          record.concat(",");
-
-          int16_t raw41 = ads04.readADC(1);
-            float volt41 = ads04.toVoltage(raw41);
-            record.concat(String(volt41, 4));
-          record.concat(",");
-
-          int16_t raw42 = ads04.readADC(2);
-            float volt42 = ads04.toVoltage(raw42);
-            record.concat(String(volt42, 4));
-          record.concat(",");
-
-      record.concat(readLoadCell());
+      // Read load cell
+	  loadCellReading = readLoadCell();
+      readloadcell = loadCellReading * g * 0.001;
+      record.concat(String(loadCellReading));
+      record.concat(",");
+      record.concat(String(readloadcell));
       record.concat("\n");
       
       appendFile(SD, fileName.c_str(), record.c_str());
       Serial.println(record);
       dateTimeStr = "";
       record = "";
-      delayMicroseconds(1000000);
+      delayMicroseconds(800000);
       }      
   //End record data for 4 seconds
       record.concat("\n");
 
   //Stop press material    
-      stepperZ.moveTo(400);
+      stepperZ.moveTo(abs(depth));
       stepperZ.runToPosition();
       stepperZ.setCurrentPosition(0);
 
@@ -2315,68 +2190,15 @@ void loop() {
       record.concat(" ");
       testCount++;
       
-      int16_t raw10 = ads01.readADC(0);
-            float volt10 = ads01.toVoltage(raw10);
-            record.concat(String(volt10, 4));
-          record.concat(",");
-          
-          int16_t raw11 = ads01.readADC(1);
-            float volt11 = ads01.toVoltage(raw11);
-            record.concat(String(volt11, 4));
-          record.concat(",");
+// Read all ADS1115 channels
+      readADS();
 
-          int16_t raw12 = ads01.readADC(2);
-            float volt12 = ads01.toVoltage(raw12);
-            record.concat(String(volt12, 4));
-          record.concat(",");
-
-
-            int16_t raw20 = ads02.readADC(0);
-            float volt20 = ads02.toVoltage(raw20);
-            record.concat(String(volt20, 4));
-          record.concat(",");
-
-          int16_t raw21 = ads02.readADC(1);
-            float volt21 = ads02.toVoltage(raw21);
-            record.concat(String(volt21, 4));
-          record.concat(",");
-
-          int16_t raw22 = ads02.readADC(2);
-            float volt22 = ads02.toVoltage(raw22);
-            record.concat(String(volt22, 4));
-          record.concat(",");
-
-            int16_t raw30 = ads03.readADC(0);
-            float volt30 = ads03.toVoltage(raw30);
-            record.concat(String(volt30, 4));
-          record.concat(",");
-
-          int16_t raw31 = ads03.readADC(1);
-            float volt31 = ads03.toVoltage(raw31);
-            record.concat(String(volt31, 4));
-          record.concat(",");
-
-          int16_t raw32 = ads03.readADC(2);
-            float volt32 = ads03.toVoltage(raw32);
-            record.concat(String(volt32, 4));
-          record.concat(",");
-
-            int16_t raw40 = ads04.readADC(0);
-            float volt40 = ads04.toVoltage(raw40);
-            record.concat(String(volt40, 4));
-          record.concat(",");
-
-          int16_t raw41 = ads04.readADC(1);
-            float volt41 = ads04.toVoltage(raw41);
-            record.concat(String(volt41, 4));
-          record.concat(",");
-
-          int16_t raw42 = ads04.readADC(2);
-            float volt42 = ads04.toVoltage(raw42);
-            record.concat(String(volt42, 4));
-          record.concat(",");
-
-      record.concat(readLoadCell());
+      // Read load cell
+	  loadCellReading = readLoadCell();
+      readloadcell = loadCellReading * g * 0.001;
+      record.concat(String(loadCellReading));
+      record.concat(",");
+      record.concat(String(readloadcell));
       record.concat("\n");
       
       appendFile(SD, fileName.c_str(), record.c_str());
@@ -2506,9 +2328,7 @@ void enterWifiDetailsCallback(Control * sender, int type) {
     EEPROM.write(i + 32, '\0');
     EEPROM.end();
   }
-}  
-
-
+}
 
 void randomString(char *buf, int len) {
   for (auto i = 0; i < len - 1; i++)
